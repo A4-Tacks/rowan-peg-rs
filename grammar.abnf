@@ -1,0 +1,39 @@
+;; use ABNF like grammar
+;; char-val to case-sensitive
+;; prose-val -> char classes
+;; add peg lookaheads `!` `&`
+;; add quiet `~`
+;; add slice `$`
+;; remove num-var
+;;
+;; vim:nowrap
+
+comment     = $(";" *<^\n>) @comment
+whitespace  = $(*< \t\r\n>)
+trivia      = whitespace *(comment whitespace)
+ident       = $(!<0-9> *(<0-9a-zA-Z_->/<^\u{00}-\u{a0}>)) @ident
+number      = $(+<0-9>) @number
+string      = $(<"> *<^\"\r\n> <">) @string
+matches     = $("<" *<^\x3e\r\n> ">") @matches
+label       = ident / string
+repeat-rest = "*" [number]
+repeat      = "+"
+            / number [repeat-rest]
+            / repeat-rest
+pat-expect  = "@" label
+pat-atom    = ident !(trivia "=")            ; a rule reference
+            / string                    ; keyword
+            / matches                   ; char classes
+            / "[" trivia pat-choice trivia "]"     ; optional
+            / "(" trivia pat-choice trivia ")"     ; simple paren
+pat-op      = "&" pat-atom ; positive lookahead
+            / "!" pat-atom ; negative lookahead
+            / "~" pat-atom ; quiet
+            / "$" pat-atom ; slice
+            / repeat trivia pat-atom
+            / pat-atom
+pat-list    = pat-op *(trivia pat-op)
+pat-choice  = pat-list *(trivia "/" trivia pat-list)
+              [trivia pat-expect]; extra expected branch
+decl        = ident trivia "=" trivia pat-choice
+decl-list   = +(trivia decl) trivia
