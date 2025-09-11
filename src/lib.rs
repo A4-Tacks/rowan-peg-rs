@@ -3,9 +3,11 @@ use std::{fmt::Display, mem};
 use linked_hash_map::LinkedHashMap as HashMap;
 
 use rowan::{ast::{support, AstChildren, AstNode}, Language, NodeOrToken, SyntaxKind};
-use rowan_peg_utils as utils;
+use rowan_peg_utils as rpu;
 use to_true::{InTrue, ToTrue};
 use unicode_ident::is_xid_continue;
+
+mod utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Lang {}
@@ -49,6 +51,7 @@ pub enum Kind {
     NUMBER,
     STRING,
     MATCHES,
+    EXPORTS_KW,
 
     LABEL,
     REPEAT,
@@ -59,6 +62,9 @@ pub enum Kind {
     PATLIST,
     PATCHOICE,
     DECL,
+    NAMED,
+    EXPORT,
+    EXPORT_LIST,
     DECL_LIST,
 }
 
@@ -74,11 +80,11 @@ impl From<Kind> for SyntaxKind {
     }
 }
 
-peg::parser!(pub grammar parser<'b>(state: &'b utils::ParseState<'input>) for str {
+peg::parser!(pub grammar parser<'b>(state: &'b rpu::ParseState<'input>) for str {
     use Kind::*;
 
-    rule guard(k: Kind) -> utils::RuleGuard<'b, 'input> = { state.guard(k) }
-    rule guard_none() -> utils::RuleGuard<'b, 'input> = { state.guard_none() }
+    rule guard(k: Kind) -> rpu::RuleGuard<'b, 'input> = { state.guard(k) }
+    rule guard_none() -> rpu::RuleGuard<'b, 'input> = { state.guard_none() }
     rule back(r: rule<()>) = g:guard_none() r() {g.accept_none();}
     rule opt(r: rule<()>) = back(<r()>)?
     rule quiet(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} {g.accept_none();}
@@ -138,11 +144,19 @@ peg::parser!(pub grammar parser<'b>(state: &'b utils::ParseState<'input>) for st
         = node(PATLIST, <()patop() back(<_ patop()>)*>)
     rule patchoice()
         = node(PATCHOICE, <()patlist() back(<_ tok(SLASH, <"/">) _ patlist()>)* opt(<_ pat_expected()>)>)
+    rule named()
+        = node(NAMED, <ident() _ tok(EQ, <"=">) _>)
     rule decl()
-        = node(DECL, <()ident() _ tok(EQ, <"=">) _ patchoice()>)
+        = node(DECL, <named() patchoice()>)
+    rule export() = node(EXPORT, <named()? ident()>)
+    rule export_list()
+        = node(EXPORT_LIST, <
+            tok(EXPORTS_KW, <"exports">)
+            _ tok(L_BRACK, <"[">) _ back(<export() _>)* tok(R_BRACK, <"]">)
+        >)
     pub
     rule decl_list()
-        = node(DECL_LIST, <()_ decl() back(<_ decl()>)* _>)
+        = node(DECL_LIST, <_ (export_list() _)? back(<decl() _>)+>)
 });
 
 macro_rules! decl_ast_node {
@@ -186,6 +200,9 @@ decl_ast_node!(Patop, PATOP);
 decl_ast_node!(Patlist, PATLIST);
 decl_ast_node!(Patchoice, PATCHOICE);
 decl_ast_node!(Decl, DECL);
+decl_ast_node!(Named, NAMED);
+decl_ast_node!(Export, EXPORT);
+decl_ast_node!(ExportList, EXPORT_LIST);
 decl_ast_node!(DeclList, DECL_LIST);
 
 impl Trivia {
@@ -311,9 +328,28 @@ impl Patchoice {
         support::child(self.syntax())
     }
 }
-impl Decl {
+impl Named {
     pub fn ident(&self) -> SyntaxToken {
         support::token(self.syntax(), Kind::IDENT).unwrap()
+    }
+}
+impl Export {
+    pub fn named(&self) -> Option<Named> {
+        support::child(self.syntax())
+    }
+
+    pub fn ident(&self) -> SyntaxToken {
+        support::token(self.syntax(), Kind::IDENT).unwrap()
+    }
+}
+impl ExportList {
+    pub fn exports(&self) -> AstChildren<Export> {
+        support::children(self.syntax())
+    }
+}
+impl Decl {
+    pub fn named(&self) -> Named {
+        support::child(self.syntax()).unwrap()
     }
 
     pub fn patchoice(&self) -> Patchoice {
@@ -321,6 +357,10 @@ impl Decl {
     }
 }
 impl DeclList {
+    pub fn export_list(&self) -> Option<ExportList> {
+        support::child(self.syntax())
+    }
+
     pub fn decls(&self) -> AstChildren<Decl> {
         support::children(self.syntax())
     }
@@ -356,130 +396,28 @@ pub mod value {
     }
 }
 
-const RUST_KEYWORDS: &[&str] = {&[
-    "Self",
-    "abstract",
-    "as",
-    "become",
-    "box",
-    "break",
-    "const",
-    "continue",
-    "crate",
-    "do",
-    "else",
-    "enum",
-    "extern",
-    "false",
-    "final",
-    "fn",
-    "for",
-    "if",
-    "impl",
-    "in",
-    "let",
-    "loop",
-    "macro",
-    "match",
-    "mod",
-    "move",
-    "mut",
-    "override",
-    "priv",
-    "pub",
-    "ref",
-    "return",
-    "self",
-    "static",
-    "struct",
-    "super",
-    "trait",
-    "true",
-    "type",
-    "typeof",
-    "unsafe",
-    "unsized",
-    "use",
-    "virtual",
-    "where",
-    "while",
-    "yield",
-    "async",
-    "await",
-    "dyn",
-    "gen",
-    "try",
-]};
-const PUNCT_NAMES: &[(&str, &str)] = {&[
-    ("$", "dollar"),
-    (";", "semicolon"),
-    (",", "comma"),
-    ("(", "l_paren"),
-    (")", "r_paren"),
-    ("{", "l_curly"),
-    ("}", "r_curly"),
-    ("[", "l_brack"),
-    ("]", "r_brack"),
-    ("<", "l_angle"),
-    (">", "r_angle"),
-    ("@", "at"),
-    ("#", "pound"),
-    ("~", "tilde"),
-    ("?", "question"),
-    ("&", "amp"),
-    ("|", "pipe"),
-    ("+", "plus"),
-    ("*", "star"),
-    ("/", "slash"),
-    ("^", "caret"),
-    ("%", "percent"),
-    ("_", "underscore"),
-    (".", "dot"),
-    ("..", "dot2"),
-    ("...", "dot3"),
-    ("..=", "dot2eq"),
-    (":", "colon"),
-    ("::", "colon2"),
-    ("=", "eq"),
-    ("==", "eq2"),
-    ("===", "eq3"),
-    ("=>", "fat_arrow"),
-    ("!", "bang"),
-    ("!=", "neq"),
-    ("!==", "neq2"),
-    ("-", "minus"),
-    ("->", "thin_arrow"),
-    ("<=", "lteq"),
-    (">=", "gteq"),
-    ("+=", "pluseq"),
-    ("-=", "minuseq"),
-    ("|=", "pipeeq"),
-    ("&=", "ampeq"),
-    ("^=", "careteq"),
-    ("/=", "slasheq"),
-    ("*=", "stareq"),
-    ("%=", "percenteq"),
-    ("&&", "amp2"),
-    ("||", "pipe2"),
-    ("<<", "shl"),
-    (">>", "shr"),
-    ("<<=", "shleq"),
-    (">>=", "shreq"),
-]};
-
 #[derive(Debug)]
 pub enum Error {
     EmptyLiteral(SyntaxToken),
-    UnknownPunct(SyntaxToken),
+    UnknownLiteral(SyntaxToken),
     MatchesWithoutSlice(SyntaxToken),
     DisallowedSlice(SyntaxNode),
 }
+
 type Result<T, E = Error> = core::result::Result<T, E>;
+
+enum Method {
+    Token { kind: String, unique: bool },
+    Node { kind: String, unique: bool },
+}
 
 pub struct Processor<W: fmt::Write> {
     out: W,
     names_map: HashMap<String, String>,
     slice: u32,
+    is_token_decl: bool,
+    exports: HashMap<String, String>,
+    decl_name: String,
 }
 
 impl<W: fmt::Write> From<W> for Processor<W> {
@@ -488,6 +426,9 @@ impl<W: fmt::Write> From<W> for Processor<W> {
             out,
             names_map: HashMap::new(),
             slice: 0,
+            is_token_decl: false,
+            exports: HashMap::new(),
+            decl_name: String::new(),
         }
     }
 }
@@ -514,13 +455,9 @@ r#"
 
 impl<W: fmt::Write> Processor<W> {
     fn regist_name(&mut self, name: &str) -> (String, String) {
-        let name = if RUST_KEYWORDS.contains(&name) {
-            format!("{name}_")
-        } else {
-            name.replace('-', "_")
-        };
+        let name = utils::rule_name_of(name);
         let kind_name = self.names_map.entry(name.to_owned())
-            .or_insert_with(|| name.to_ascii_uppercase());
+            .or_insert_with(|| utils::kind_name_of(self.exports.get(&name).unwrap_or(&name)));
         (name, kind_name.clone())
     }
 
@@ -529,18 +466,16 @@ impl<W: fmt::Write> Processor<W> {
         if content.is_empty() {
             return Err(Error::EmptyLiteral(token.clone()));
         }
-        let (name, kind_name) = if content.chars()
+        let (name, kind_name) = if let Some(name) = utils::punct_name_of(content) {
+            (name.to_owned(), utils::kind_name_of(&name))
+        } else if content.chars()
             .all(|ch| matches!(ch, '-' | '_') || is_xid_continue(ch))
         {
-            let name = content.replace('-', "_")+"_kw";
-            let kind_name = name.to_ascii_uppercase();
+            let name = utils::rule_name_of(content)+"_kw";
+            let kind_name = utils::kind_name_of(content)+"_KW";
             (name, kind_name)
-        } else if let Some(&(_, name)) = PUNCT_NAMES.iter()
-            .find(|(punct, _)| content == *punct)
-        {
-            (name.to_owned(), name.to_ascii_uppercase())
         } else {
-            return Err(Error::UnknownPunct(token.to_owned()));
+            return Err(Error::UnknownLiteral(token.to_owned()));
         };
 
         self.names_map.insert(name.clone(), kind_name.clone());
@@ -549,6 +484,16 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     pub fn start_process(&mut self, decl_list: &DeclList) -> Result<()> {
+        for export in decl_list.export_list().iter().flat_map(|list| list.exports()) {
+            let name = export.ident();
+            let new_name = export.named()
+                .map_or(name.clone(), |it| it.ident());
+            self.exports.insert(
+                utils::rule_name_of(name.text()),
+                utils::rule_name_of(new_name.text()),
+            );
+        }
+
         writeln!(self.out, "{PRE_DEFINE_ITEMS}").unwrap();
         writeln!(self.out, "pub use parser::*;").unwrap();
         writeln!(self.out, "::peg::parser!(grammar parser<'b>(state: \
@@ -588,11 +533,41 @@ impl<W: fmt::Write> Processor<W> {
         Ok(())
     }
 
+    fn decl_is_token(&self, decl: &Decl) -> bool {
+        let Some(list) = utils::one_elem(decl.patchoice().patlists()) else { return false };
+        let Some(op) = utils::one_elem(list.patops()) else { return false };
+        if op.dollar().is_some() {
+            return true;
+        }
+        op.patatom().syntax().text_range() != op.syntax().text_range()
+            && op.patatom().string().is_some()
+    }
+
     fn process_decl(&mut self, decl: Decl) -> Result<()> {
-        let (name, kind_name) = self.regist_name(decl.ident().text());
-        write!(self.out, "    rule {name}() = _node__({kind_name}, <()").unwrap();
+        let (name, kind_name) = self.regist_name(decl.named().ident().text());
+        self.is_token_decl = self.decl_is_token(&decl);
+        self.decl_name = name;
+        let name = &self.decl_name;
+        let mut vis = "";
+        if let Some(new_name) = self.exports.get(name) {
+            if name == new_name {
+                vis = "pub ";
+            } else {
+                writeln!(self.out, "    pub rule {new_name}() = {name}").unwrap();
+            }
+        }
+        if self.is_token_decl {
+            write!(self.out, "    {vis}rule {name}() = ()").unwrap();
+        } else {
+            write!(self.out, "    {vis}rule {name}() = _node__({kind_name}, <()").unwrap();
+        }
+
         self.process_pat_choice(decl.patchoice())?;
-        writeln!(self.out, ">)").unwrap();
+
+        if !self.is_token_decl {
+            write!(self.out, ">)").unwrap();
+        }
+        writeln!(self.out).unwrap();
         Ok(())
     }
 
@@ -635,12 +610,9 @@ impl<W: fmt::Write> Processor<W> {
             self.process_patatom(atom)?;
             write!(self.out, "}}").unwrap();
         } else if patop.dollar().is_some() {
-            if let Some(decl) = patop.syntax().ancestors().skip(1).find_map(Decl::cast)
-                && decl.patchoice().patlists().count() == 1
-                && decl.patchoice().patlists().next().unwrap().syntax().text_range()
-                    == patop.syntax().text_range()
-            {
-                let (_, kind_name) = self.regist_name(decl.ident().text());
+            if self.is_token_decl && self.slice == 0 {
+                let name = &self.decl_name.clone();
+                let (_, kind_name) = self.regist_name(name);
                 write!(self.out, "_tok__({kind_name}, <()").unwrap();
                 self.slice += 1;
                 self.process_patatom(atom)?;
@@ -682,7 +654,7 @@ impl<W: fmt::Write> Processor<W> {
             self.process_pat_choice(atom.patchoice().unwrap())?;
             write!(self.out, ">)").unwrap();
         } else if let Some(ident) = atom.ident() {
-            write!(self.out, "{}()", ident.text().replace('-', "_")).unwrap();
+            write!(self.out, "{}()", utils::rule_name_of(ident.text())).unwrap();
         } else if let Some(string) = atom.string() {
             self.tok_or_in_slice(&string)?;
         } else if let Some(matches) = atom.matches()
@@ -770,7 +742,7 @@ patchoice   = patlist *(_ "/" _ patlist)
 decl        = ident _ "=" _ patchoice
 decl-list   = +(_ decl) _
     "#;
-        let mut state = utils::ParseState::default();
+        let mut state = rpu::ParseState::default();
         parser::decl_list(s, &state).unwrap();
         dbg!(&state);
         let node = SyntaxNode::new_root(state.finish());

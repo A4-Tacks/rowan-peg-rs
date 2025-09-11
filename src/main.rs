@@ -1,4 +1,4 @@
-use std::io::{self, stdin};
+use std::{io::{self, stdin}, process::exit};
 
 use rowan::ast::AstNode;
 use rowan_peg::{DeclList, Processor, SyntaxNode};
@@ -12,6 +12,12 @@ fn main() {
     let decl_list = DeclList::cast(syntax_node).unwrap();
     let mut buf = String::new();
     let mut proc = Processor::from(&mut buf);
-    proc.start_process(&decl_list).unwrap();
+    match proc.start_process(&decl_list) {
+        Ok(()) => {},
+        Err(e) => {
+            eprintln!("Process codegen error: {e:#?}");
+            exit(1)
+        },
+    }
     println!("{buf}");
 }

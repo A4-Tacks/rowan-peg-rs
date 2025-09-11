@@ -8,9 +8,14 @@
 ;;
 ;; vim:nowrap
 
+exports [
+    decl-list
+    trivia = _
+]
+
 comment     = $(";" *<^\n>) @comment
 whitespace  = $(*< \t\r\n>)
-trivia      = whitespace *(comment whitespace)
+_           = whitespace *(comment whitespace)
 ident       = $(!<0-9> *(<0-9a-zA-Z_->/<^\u{00}-\u{a0}>)) @ident
 number      = $(+<0-9>) @number
 string      = $(<"> *<^\"\r\n> <">) @string
@@ -21,19 +26,22 @@ repeat      = "+"
             / number [repeat-rest]
             / repeat-rest
 pat-expect  = "@" label
-pat-atom    = ident !(trivia "=")            ; a rule reference
+pat-atom    = ident !(_ "=")            ; a rule reference
             / string                    ; keyword
             / matches                   ; char classes
-            / "[" trivia pat-choice trivia "]"     ; optional
-            / "(" trivia pat-choice trivia ")"     ; simple paren
+            / "[" _ pat-choice _ "]"     ; optional
+            / "(" _ pat-choice _ ")"     ; simple paren
 pat-op      = "&" pat-atom ; positive lookahead
             / "!" pat-atom ; negative lookahead
             / "~" pat-atom ; quiet
             / "$" pat-atom ; slice
-            / repeat trivia pat-atom
+            / repeat _ pat-atom
             / pat-atom
-pat-list    = pat-op *(trivia pat-op)
-pat-choice  = pat-list *(trivia "/" trivia pat-list)
-              [trivia pat-expect]; extra expected branch
-decl        = ident trivia "=" trivia pat-choice
-decl-list   = +(trivia decl) trivia
+pat-list    = pat-op *(_ pat-op)
+pat-choice  = pat-list *(_ "/" _ pat-list)
+              [_ pat-expect]; extra expected branch
+named       = ident _ "=" _
+decl        = named pat-choice
+export      = [named] ident
+export-list = "exports" _ "[" _ *(export _) "]"
+decl-list   = _ [export-list _] +(decl _)
