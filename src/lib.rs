@@ -1,11 +1,13 @@
 use core::fmt;
-use std::{fmt::Display, mem};
+use std::{collections::HashSet, fmt::Display, mem::{self, take}};
 use linked_hash_map::LinkedHashMap as HashMap;
 
 use rowan::{ast::{support, AstChildren, AstNode}, Language, NodeOrToken, SyntaxKind};
 use rowan_peg_utils as rpu;
 use to_true::{InTrue, ToTrue};
 use unicode_ident::is_xid_continue;
+
+use crate::utils::UsedBound;
 
 mod utils;
 
@@ -190,7 +192,6 @@ macro_rules! decl_ast_node {
     };
 }
 decl_ast_node!(Trivia, TRIVIA);
-decl_ast_node!(Match, MATCHES);
 decl_ast_node!(Label, LABEL);
 decl_ast_node!(RepeatRest, REPEAT_REST);
 decl_ast_node!(Repeat, REPEAT);
@@ -249,6 +250,21 @@ impl Repeat {
 
     pub fn repeat_rest(&self) -> Option<RepeatRest> {
         support::child(self.syntax())
+    }
+
+    pub fn count_bounds(&self) -> (u32, Option<u32>) {
+        if self.plus().is_some() {
+            (1, None)
+        } else if let Some(rest) = self.repeat_rest() {
+            let lower_bound = self.number().as_ref().map_or(0, value::number);
+            let upper_bound = rest.number().as_ref().map(value::number);
+            (lower_bound, upper_bound)
+        } else if let Some(number) = self.number() {
+            let bound = value::number(&number);
+            (bound, bound.into())
+        } else {
+            unreachable!()
+        }
     }
 }
 impl PatExpected {
@@ -407,34 +423,43 @@ pub enum Error {
 type Result<T, E = Error> = core::result::Result<T, E>;
 
 enum Method {
-    Token { kind: String, unique: bool },
-    Node { kind: String, unique: bool },
+    Optional,
+    Strict,
+    Many,
 }
 
 pub struct Processor<W: fmt::Write> {
     out: W,
-    names_map: HashMap<String, String>,
+    kind_names_map: HashMap<String, String>,
     slice: u32,
     is_token_decl: bool,
     exports: HashMap<String, String>,
     decl_name: String,
+    refs_bound: HashMap<String, UsedBound>,
+    is_tokens: HashSet<String>,
+    methods: HashMap<String, Vec<(String, Method)>>,
 }
 
 impl<W: fmt::Write> From<W> for Processor<W> {
     fn from(out: W) -> Self {
         Self {
             out,
-            names_map: HashMap::new(),
+            kind_names_map: HashMap::new(),
             slice: 0,
             is_token_decl: false,
             exports: HashMap::new(),
             decl_name: String::new(),
+            refs_bound: HashMap::new(),
+            is_tokens: HashSet::new(),
+            methods: HashMap::new(),
         }
     }
 }
 
 const PRE_DEFINE_ITEMS: &str = {
-r#"macro_rules! classes {
+r#"use rowan::{ast::{support, AstChildren, AstNode}, Language};
+
+macro_rules! classes {
     ($($pat:tt)*) => {
         |s, i| ::char_classes::FirstElem::first_elem(&s[i..])
             .filter(::char_classes::any!($($pat)*))
@@ -443,20 +468,67 @@ r#"macro_rules! classes {
             })
     };
 }
+macro_rules! decl_ast_node {
+    ($node:ident, $kind:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub struct $node(SyntaxNode);
+        impl AstNode for $node {
+            type Language = Lang;
+
+            fn syntax(&self) -> &rowan::SyntaxNode<Self::Language> {
+                &self.0
+            }
+
+            fn can_cast(kind: <Self::Language as Language>::Kind) -> bool {
+                kind == SyntaxKind::$kind
+            }
+
+            fn cast(node: rowan::SyntaxNode<Self::Language>) -> Option<Self> {
+                if Self::can_cast(node.kind()) {
+                    Some(Self(node))
+                } else {
+                    None
+                }
+            }
+        }
+        impl core::fmt::Display for $node {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Display::fmt(self.syntax(), f)
+            }
+        }
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Lang {}
+impl Language for Lang {
+    type Kind = SyntaxKind;
+
+    fn kind_to_raw(kind: Self::Kind) -> ::rowan::SyntaxKind {
+        kind.into()
+    }
+
+    fn kind_from_raw(raw: ::rowan::SyntaxKind) -> Self::Kind {
+        raw.into()
+    }
+}
+
+pub type SyntaxNode = ::rowan::SyntaxNode<Lang>;
+pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
 "#};
 const PRE_DEFINE_RULES: &str = {
 r#"
     rule _back__(r: rule<()>) = g:({ state.guard_none() }) r() { g.accept_none() }
     rule _opt__(r: rule<()>) = _back__(<r()>)?
     rule _quiet__(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} { g.accept_none() }
-    rule _tok__(k: Kind, r: rule<()>) = (g:({state.quiet().guard_token(k)}) s:$(quiet!{r()}) { g.accept_token(s) })
-    rule _node__(k: Kind, r: rule<()>) = (g:({state.guard(k)}) r() { g.accept() })
+    rule _tok__(k: SyntaxKind, r: rule<()>) = (g:({state.quiet().guard_token(k)}) s:$(quiet!{r()}) { g.accept_token(s) })
+    rule _node__(k: SyntaxKind, r: rule<()>) = (g:({state.guard(k)}) r() { g.accept() })
 "#};
 
 impl<W: fmt::Write> Processor<W> {
     fn regist_name(&mut self, name: &str) -> (String, String) {
         let name = utils::rule_name_of(name);
-        let kind_name = self.names_map.entry(name.to_owned())
+        let kind_name = self.kind_names_map.entry(name.to_owned())
             .or_insert_with(|| utils::kind_name_of(self.exports.get(&name).unwrap_or(&name)));
         (name, kind_name.clone())
     }
@@ -472,15 +544,38 @@ impl<W: fmt::Write> Processor<W> {
             .all(|ch| matches!(ch, '-' | '_') || is_xid_continue(ch))
         {
             let name = utils::rule_name_of(content)+"_kw";
-            let kind_name = utils::kind_name_of(content)+"_KW";
+            let kind_name = utils::kind_name_of(&name);
             (name, kind_name)
         } else {
             return Err(Error::UnknownLiteral(token.to_owned()));
         };
 
-        self.names_map.insert(name.clone(), kind_name.clone());
+        self.is_tokens.insert(name.clone());
+        self.kind_names_map.insert(name.clone(), kind_name.clone());
 
         Ok((name, kind_name))
+    }
+
+    fn add_bound(&mut self, name: impl Into<String>) {
+        if !self.is_token_decl {
+            let mut name = name.into();
+            if let Some(renamed_name) = self.exports.get(&name) {
+                name = renamed_name.to_owned();
+            }
+            *self.refs_bound.entry(name).or_default() += 1;
+        }
+    }
+
+    fn dis_refs_bound<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let refs_bound = self.take_refs_bound();
+        let result = f(self);
+        self.refs_bound = refs_bound;
+        result
+    }
+
+    #[must_use]
+    fn take_refs_bound(&mut self) -> HashMap<String, UsedBound> {
+        take(&mut self.refs_bound)
     }
 
     pub fn start_process(&mut self, decl_list: &DeclList) -> Result<()> {
@@ -498,7 +593,7 @@ impl<W: fmt::Write> Processor<W> {
         writeln!(self.out, "pub use parser::*;").unwrap();
         writeln!(self.out, "::peg::parser!(grammar parser<'b>(state: \
             &'b ::rowan_peg_utils::ParseState<'input>) for str {{").unwrap();
-        writeln!(self.out, "    use Kind::*;").unwrap();
+        writeln!(self.out, "    use SyntaxKind::*;").unwrap();
         writeln!(self.out, "{PRE_DEFINE_RULES}").unwrap();
         for decl in decl_list.decls() {
             self.process_decl(decl)?;
@@ -507,10 +602,10 @@ impl<W: fmt::Write> Processor<W> {
         writeln!(self.out, "#[repr(u16)]").unwrap();
         writeln!(self.out, "#[allow(non_camel_case_types)]").unwrap();
         writeln!(self.out, "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]").unwrap();
-        writeln!(self.out, "pub enum Kind {{").unwrap();
+        writeln!(self.out, "pub enum SyntaxKind {{").unwrap();
         let mut first = true;
         let mut last = None;
-        for kind in self.names_map.values() {
+        for kind in self.kind_names_map.values() {
             first.to_false(|| {
                 writeln!(self.out, "    {kind} = 0,").unwrap();
             }).unwrap_or_else(|| {
@@ -519,17 +614,57 @@ impl<W: fmt::Write> Processor<W> {
             last = kind.into();
         }
         writeln!(self.out, "}}").unwrap();
-        writeln!(self.out, "impl From<::rowan::SyntaxKind> for Kind {{ \
+        writeln!(self.out, "impl From<::rowan::SyntaxKind> for SyntaxKind {{ \
             fn from(kind: ::rowan::SyntaxKind) -> Self {{ \
                 ::core::assert!(kind.0 <= Self::{} as u16); \
-                unsafe {{ ::core::mem::transmute::<u16, Kind>(kind.0) }} \
+                unsafe {{ ::core::mem::transmute::<u16, SyntaxKind>(kind.0) }} \
             }} \
         }}", last.unwrap()).unwrap();
-        writeln!(self.out, "impl From<Kind> for ::rowan::SyntaxKind {{ \
-            fn from(kind: Kind) -> Self {{ \
+        writeln!(self.out, "impl From<SyntaxKind> for ::rowan::SyntaxKind {{ \
+            fn from(kind: SyntaxKind) -> Self {{ \
                 ::rowan::SyntaxKind(kind as u16) \
             }} \
         }}").unwrap();
+        for (rule_name, mut methods) in self.methods.drain() {
+            if self.is_tokens.contains(&rule_name) { continue }
+            let node_name = utils::node_name_of(&rule_name);
+            let node_kind = utils::kind_name_of(&rule_name);
+            methods.sort_by(|a, b| a.0.cmp(&b.0));
+
+            writeln!(self.out, "decl_ast_node!({node_name}, {node_kind});").unwrap();
+            writeln!(self.out, "impl {node_name} {{").unwrap();
+            for (method_name, method) in methods {
+                let is_token = self.is_tokens.contains(&method_name);
+                let mut base_ty = if is_token {
+                    "SyntaxToken".to_owned()
+                } else {
+                    utils::node_name_of(&method_name)
+                };
+                match method {
+                    Method::Optional => base_ty = format!("Option<{base_ty}>"),
+                    Method::Strict => (),
+                    Method::Many => base_ty = format!("AstChildren<{base_ty}>"),
+                }
+                let body = if is_token {
+                    let kind = utils::kind_name_of(&method_name);
+                    match method {
+                        Method::Optional => format!("support::token(self.syntax(), SyntaxKind::{kind})"),
+                        Method::Strict => format!("support::token(self.syntax(), SyntaxKind::{kind}).unwrap()"),
+                        Method::Many => continue,
+                    }
+                } else {
+                    match method {
+                        Method::Optional => "support::child(self.syntax())",
+                        Method::Strict => "support::child(self.syntax()).unwrap()",
+                        Method::Many => "support::children(self.syntax())",
+                    }.into()
+                };
+                writeln!(self.out, "    pub fn {method_name}(&self) -> {base_ty} {{").unwrap();
+                writeln!(self.out, "        {body}").unwrap();
+                writeln!(self.out, "    }}").unwrap();
+            }
+            writeln!(self.out, "}}").unwrap();
+        }
         Ok(())
     }
 
@@ -549,6 +684,10 @@ impl<W: fmt::Write> Processor<W> {
         self.decl_name = name;
         let name = &self.decl_name;
         let mut vis = "";
+
+        if self.is_token_decl {
+            self.is_tokens.insert(name.clone());
+        }
         if let Some(new_name) = self.exports.get(name) {
             if name == new_name {
                 vis = "pub ";
@@ -562,28 +701,69 @@ impl<W: fmt::Write> Processor<W> {
             write!(self.out, "    {vis}rule {name}() = _node__({kind_name}, <()").unwrap();
         }
 
+        self.refs_bound.clear();
         self.process_pat_choice(decl.patchoice())?;
 
         if !self.is_token_decl {
             write!(self.out, ">)").unwrap();
         }
         writeln!(self.out).unwrap();
+        let methods = self.refs_bound.iter().filter_map(|(name, bound)| {
+            let ty = match bound {
+                UsedBound(0, 0) => return None,
+                UsedBound(0, 1) => Method::Optional,
+                UsedBound(1, 1) => Method::Strict,
+                _ => Method::Many,
+            };
+            Some((name.clone(), ty))
+        }).collect();
+        let name = self.exports.get(&self.decl_name).unwrap_or(&self.decl_name);
+        self.methods.insert(name.clone(), methods);
         Ok(())
     }
 
     fn process_pat_choice(&mut self, patchoice: Patchoice) -> Result<()> {
         let mut first = true;
+        let refs_bound = self.take_refs_bound();
+        let mut prev_bound: Option<HashMap<String, UsedBound>> = None;
         for patlist in patchoice.patlists() {
             first.in_false(|| write!(self.out, " / ").unwrap());
             write!(self.out, "()_back__(<()").unwrap();
             self.process_pat_list(patlist)?;
             write!(self.out, ">)").unwrap();
+            if let Some(prev_bound) = &mut prev_bound {
+                self.merge_cover_to(prev_bound);
+            } else {
+                prev_bound = Some(self.take_refs_bound());
+            }
         }
+        assert_eq!(self.refs_bound.len(), 0);
+        self.merge_add(refs_bound);
+        self.merge_add(prev_bound.unwrap());
         if let Some(expected) = patchoice.pat_expected() {
             let name = value::label(&expected.label());
             write!(self.out, " / expected!({name:?})").unwrap();
         }
         Ok(())
+    }
+
+    fn merge_cover_to(&mut self, prev_bound: &mut HashMap<String, UsedBound>) {
+        for key in self.refs_bound.keys() {
+            if !prev_bound.contains_key(key) {
+                prev_bound.insert(key.clone(), UsedBound::default());
+            }
+        }
+        for (key, value) in &mut *prev_bound {
+            let other = self.refs_bound.get(key).copied().unwrap_or_default();
+            *value = value.cover(other);
+        }
+        self.refs_bound.clear();
+    }
+
+    fn merge_add(&mut self, refs_bound: HashMap<String, UsedBound>) {
+        for (key, value) in refs_bound {
+            *self.refs_bound.entry(key).or_default() += value;
+        }
     }
 
     fn process_pat_list(&mut self, patlist: Patlist) -> Result<()> {
@@ -599,15 +779,15 @@ impl<W: fmt::Write> Processor<W> {
         let atom = patop.patatom();
         if patop.amp().is_some() {
             write!(self.out, "&_quiet__(<()").unwrap();
-            self.process_patatom(atom)?;
+            self.dis_refs_bound(|this| this.process_patatom(atom))?;
             write!(self.out, ">)").unwrap();
         } else if patop.bang().is_some() {
             write!(self.out, "!_quiet__(<()").unwrap();
-            self.process_patatom(atom)?;
+            self.dis_refs_bound(|this| this.process_patatom(atom))?;
             write!(self.out, ">)").unwrap();
         } else if patop.tilde().is_some() {
             write!(self.out, "quiet!{{").unwrap();
-            self.process_patatom(atom)?;
+            self.dis_refs_bound(|this| this.process_patatom(atom))?;
             write!(self.out, "}}").unwrap();
         } else if patop.dollar().is_some() {
             if self.is_token_decl && self.slice == 0 {
@@ -615,31 +795,29 @@ impl<W: fmt::Write> Processor<W> {
                 let (_, kind_name) = self.regist_name(name);
                 write!(self.out, "_tok__({kind_name}, <()").unwrap();
                 self.slice += 1;
-                self.process_patatom(atom)?;
+                self.dis_refs_bound(|this| this.process_patatom(atom))?;
                 self.slice -= 1;
                 write!(self.out, ">)").unwrap();
             } else {
                 return Err(Error::DisallowedSlice(patop.syntax().clone()));
             }
         } else if let Some(repeat) = patop.repeat() {
+            let refs_bound = self.take_refs_bound();
             write!(self.out, "_back__(<()").unwrap();
             self.process_patatom(atom)?;
-            if repeat.plus().is_some() {
-                write!(self.out, ">)+").unwrap();
-            } else if let Some(rest) = repeat.repeat_rest() {
-                let lower_bound = repeat.number().as_ref().map_or(0, value::number);
-                if let Some(upper_bound) = rest.number() {
-                    write!(self.out, ">)*<{lower_bound},{upper_bound}>").unwrap();
-                } else if repeat.number().is_some() {
-                    write!(self.out, ">)*<{lower_bound},>").unwrap();
-                } else {
-                    write!(self.out, ">)*").unwrap();
-                }
-            } else if let Some(number) = repeat.number() {
-                write!(self.out, ">)*<{number}>").unwrap();
-            } else {
-                unreachable!()
-            }
+            let (lower_bound, upper_bound) = repeat.count_bounds();
+            match (lower_bound, upper_bound) {
+                (1, None) => write!(self.out, ">)+"),
+                (0, None) => write!(self.out, ">)*"),
+                (lower, None) => write!(self.out, ">)*<{lower},>"),
+                (lower, Some(upper)) => write!(self.out, ">)*<{lower},{upper}>"),
+            }.unwrap();
+            let repeat_meta = UsedBound(
+                lower_bound.try_into().unwrap(),
+                upper_bound.unwrap_or(255).try_into().unwrap(),
+            );
+            self.refs_bound.iter_mut().for_each(|(_, bound)| *bound *= repeat_meta);
+            self.merge_add(refs_bound);
         } else {
             self.process_patatom(atom)?;
         }
@@ -650,11 +828,16 @@ impl<W: fmt::Write> Processor<W> {
         if atom.l_paren().is_some() {
             self.process_pat_choice(atom.patchoice().unwrap())?;
         } else if atom.l_brack().is_some() {
+            let refs_bound = self.take_refs_bound();
             write!(self.out, "_opt__(<()").unwrap();
             self.process_pat_choice(atom.patchoice().unwrap())?;
             write!(self.out, ">)").unwrap();
+            self.refs_bound.iter_mut().for_each(|(_, bound)| bound.0 = 0);
+            self.merge_add(refs_bound);
         } else if let Some(ident) = atom.ident() {
-            write!(self.out, "{}()", utils::rule_name_of(ident.text())).unwrap();
+            let name = utils::rule_name_of(ident.text());
+            write!(self.out, "{}()", name).unwrap();
+            self.add_bound(name);
         } else if let Some(string) = atom.string() {
             self.tok_or_in_slice(&string)?;
         } else if let Some(matches) = atom.matches()
@@ -685,7 +868,8 @@ impl<W: fmt::Write> Processor<W> {
             value::matches(token)
         };
         if self.slice == 0 {
-            let (_, kind_name) = self.regist_tok_name(&token)?;
+            let (name, kind_name) = self.regist_tok_name(&token)?;
+            self.add_bound(name);
             write!(self.out, "_tok__({kind_name}, <{content:?}>)").unwrap();
         } else {
             write!(self.out, "{content:?}").unwrap();

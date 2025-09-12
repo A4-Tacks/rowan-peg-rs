@@ -1,3 +1,4 @@
+use std::ops;
 use to_true::InTrue;
 
 pub fn rule_name_of(name: &str) -> String {
@@ -52,6 +53,73 @@ pub fn one_elem<I: IntoIterator>(iter: I) -> Option<I::Item> {
     let mut iter = iter.into_iter();
     let first = iter.next()?;
     iter.next().is_none().then_some(first)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct UsedBound(pub u8, pub u8);
+
+impl ops::MulAssign for UsedBound {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
+    }
+}
+
+impl ops::AddAssign for UsedBound {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl ops::Add for UsedBound {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0.saturating_add(rhs.0), self.1.saturating_add(rhs.1))
+    }
+}
+
+impl ops::Mul for UsedBound {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self(self.0.saturating_mul(rhs.0), self.1.saturating_mul(rhs.1))
+    }
+}
+
+impl ops::AddAssign<u8> for UsedBound {
+    fn add_assign(&mut self, rhs: u8) {
+        *self = *self + rhs;
+    }
+}
+
+impl ops::Add<u8> for UsedBound {
+    type Output = Self;
+
+    fn add(self, rhs: u8) -> Self::Output {
+        Self(self.0.saturating_add(rhs), self.1.saturating_add(rhs))
+    }
+}
+
+impl ops::MulAssign<u8> for UsedBound {
+    fn mul_assign(&mut self, rhs: u8) {
+        *self = *self * rhs;
+    }
+}
+
+impl ops::Mul<u8> for UsedBound {
+    type Output = Self;
+
+    fn mul(self, rhs: u8) -> Self::Output {
+        Self(self.0.saturating_mul(rhs), self.1.saturating_mul(rhs))
+    }
+}
+
+impl UsedBound {
+    pub fn cover(self, other: Self) -> Self {
+        let min = self.0.min(other.0);
+        let max = self.1.max(other.1);
+        Self(min, max)
+    }
 }
 
 const RUST_KEYWORDS: &[&str] = &[
