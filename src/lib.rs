@@ -412,6 +412,7 @@ impl<W: fmt::Write> Processor<W> {
         let mut first = true;
         let refs_bound = self.take_refs_bound();
         let mut prev_bound: Option<HashMap<String, UsedBound>> = None;
+        write!(self.out, "(").unwrap();
         for patlist in patchoice.pat_lists() {
             first.in_false(|| write!(self.out, " / ").unwrap());
             write!(self.out, "()").unwrap();
@@ -429,6 +430,7 @@ impl<W: fmt::Write> Processor<W> {
             let name = value::label(&expected.label());
             write!(self.out, " / expected!({name:?})").unwrap();
         }
+        write!(self.out, ")").unwrap();
         Ok(())
     }
 
