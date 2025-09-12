@@ -167,13 +167,39 @@ pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
 const PRE_DEFINE_RULES: &str = {
 r#"
     rule _back__(r: rule<()>) = g:({ state.guard_none() }) r() { g.accept_none() }
-    rule _opt__(r: rule<()>) = _back__(<r()>)?
     rule _quiet__(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} { g.accept_none() }
     rule _tok__(k: SyntaxKind, r: rule<()>) = (g:({state.quiet().guard_token(k)}) s:$(quiet!{r()}) { g.accept_token(s) })
     rule _node__(k: SyntaxKind, r: rule<()>) = (g:({state.guard(k)}) r() { g.accept() })
 "#};
 
 impl<W: fmt::Write> Processor<W> {
+    fn gen_tok_wrap<F, R>(&mut self, kind: &str, f: F) -> R
+    where F: FnOnce(&mut Self) -> R,
+    {
+        write!(self.out, "_tok__({kind}, <()").unwrap();
+        let result = f(self);
+        write!(self.out, ">)").unwrap();
+        result
+    }
+
+    fn gen_quiet_wrap<F, R>(&mut self, f: F) -> R
+    where F: FnOnce(&mut Self) -> R,
+    {
+        write!(self.out, "_quiet__(<()").unwrap();
+        let result = f(self);
+        write!(self.out, ">)").unwrap();
+        result
+    }
+
+    fn gen_back_wrap<F, R>(&mut self, f: F) -> R
+    where F: FnOnce(&mut Self) -> R,
+    {
+        write!(self.out, "_back__(<()").unwrap();
+        let result = f(self);
+        write!(self.out, ">)").unwrap();
+        result
+    }
+
     fn regist_name(&mut self, name: &str) -> (String, String) {
         let name = utils::rule_name_of(name);
         let kind_name = self.kind_names_map.entry(name.to_owned())
@@ -376,9 +402,8 @@ impl<W: fmt::Write> Processor<W> {
         let mut prev_bound: Option<HashMap<String, UsedBound>> = None;
         for patlist in patchoice.pat_list() {
             first.in_false(|| write!(self.out, " / ").unwrap());
-            write!(self.out, "()_back__(<()").unwrap();
-            self.process_pat_list(patlist)?;
-            write!(self.out, ">)").unwrap();
+            write!(self.out, "()").unwrap();
+            self.gen_back_wrap(|this| this.process_pat_list(patlist))?;
             if let Some(prev_bound) = &mut prev_bound {
                 self.merge_cover_to(prev_bound);
             } else {
@@ -426,13 +451,11 @@ impl<W: fmt::Write> Processor<W> {
     fn process_patop(&mut self, patop: PatOp) -> Result<()> {
         let atom = patop.pat_atom();
         if patop.amp().is_some() {
-            write!(self.out, "&_quiet__(<()").unwrap();
-            self.dis_refs_bound(|this| this.process_patatom(atom))?;
-            write!(self.out, ">)").unwrap();
+            write!(self.out, "&").unwrap();
+            self.gen_quiet_wrap(|this| this.dis_refs_bound(|this| this.process_patatom(atom)))?;
         } else if patop.bang().is_some() {
-            write!(self.out, "!_quiet__(<()").unwrap();
-            self.dis_refs_bound(|this| this.process_patatom(atom))?;
-            write!(self.out, ">)").unwrap();
+            write!(self.out, "!").unwrap();
+            self.gen_quiet_wrap(|this| this.dis_refs_bound(|this| this.process_patatom(atom)))?;
         } else if patop.tilde().is_some() {
             write!(self.out, "quiet!{{").unwrap();
             self.dis_refs_bound(|this| this.process_patatom(atom))?;
@@ -441,24 +464,23 @@ impl<W: fmt::Write> Processor<W> {
             if self.is_token_decl && self.slice == 0 {
                 let name = &self.decl_name.clone();
                 let (_, kind_name) = self.regist_name(name);
-                write!(self.out, "_tok__({kind_name}, <()").unwrap();
                 self.slice += 1;
-                self.dis_refs_bound(|this| this.process_patatom(atom))?;
+                self.gen_tok_wrap(&kind_name, |this| {
+                    this.dis_refs_bound(|this| this.process_patatom(atom))
+                })?;
                 self.slice -= 1;
-                write!(self.out, ">)").unwrap();
             } else {
                 return Err(Error::DisallowedSlice(patop.syntax().clone()));
             }
         } else if let Some(repeat) = patop.repeat() {
             let refs_bound = self.take_refs_bound();
-            write!(self.out, "_back__(<()").unwrap();
-            self.process_patatom(atom)?;
+            self.gen_back_wrap(|this| this.process_patatom(atom))?;
             let (lower_bound, upper_bound) = repeat.count_bounds();
             match (lower_bound, upper_bound) {
-                (1, None) => write!(self.out, ">)+"),
-                (0, None) => write!(self.out, ">)*"),
-                (lower, None) => write!(self.out, ">)*<{lower},>"),
-                (lower, Some(upper)) => write!(self.out, ">)*<{lower},{upper}>"),
+                (1, None) => write!(self.out, "+"),
+                (0, None) => write!(self.out, "*"),
+                (lower, None) => write!(self.out, "*<{lower},>"),
+                (lower, Some(upper)) => write!(self.out, "*<{lower},{upper}>"),
             }.unwrap();
             let repeat_meta = UsedBound(
                 lower_bound.try_into().unwrap(),
@@ -477,9 +499,8 @@ impl<W: fmt::Write> Processor<W> {
             self.process_pat_choice(atom.pat_choice().unwrap())?;
         } else if atom.l_brack().is_some() {
             let refs_bound = self.take_refs_bound();
-            write!(self.out, "_opt__(<()").unwrap();
-            self.process_pat_choice(atom.pat_choice().unwrap())?;
-            write!(self.out, ">)").unwrap();
+            self.gen_back_wrap(|this| this.process_pat_choice(atom.pat_choice().unwrap()))?;
+            write!(self.out, "?").unwrap();
             self.refs_bound.iter_mut().for_each(|(_, bound)| bound.0 = 0);
             self.merge_add(refs_bound);
         } else if let Some(ident) = atom.ident() {
@@ -518,7 +539,9 @@ impl<W: fmt::Write> Processor<W> {
         if self.slice == 0 {
             let (name, kind_name) = self.regist_tok_name(&token)?;
             self.add_bound(name);
-            write!(self.out, "_tok__({kind_name}, <{content:?}>)").unwrap();
+            self.gen_tok_wrap(&kind_name, |this| {
+                write!(this.out, "{content:?}").unwrap();
+            });
         } else {
             write!(self.out, "{content:?}").unwrap();
         }

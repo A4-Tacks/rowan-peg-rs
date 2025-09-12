@@ -62,7 +62,6 @@ pub use parser::*;
     use SyntaxKind::*;
 
     rule _back__(r: rule<()>) = g:({ state.guard_none() }) r() { g.accept_none() }
-    rule _opt__(r: rule<()>) = _back__(<r()>)?
     rule _quiet__(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} { g.accept_none() }
     rule _tok__(k: SyntaxKind, r: rule<()>) = (g:({state.quiet().guard_token(k)}) s:$(quiet!{r()}) { g.accept_token(s) })
     rule _node__(k: SyntaxKind, r: rule<()>) = (g:({state.guard(k)}) r() { g.accept() })
@@ -76,18 +75,18 @@ pub use parser::*;
     rule string() = ()()_back__(<()_tok__(STRING, <()()_back__(<()"\"" _back__(<()#{classes!(^"\"\r\n")}>)* "\"">)>)>) / expected!("string")
     rule matches() = ()()_back__(<()_tok__(MATCHES, <()()_back__(<()"<" _back__(<()#{classes!(^"\x3e\r\n")}>)* ">">)>)>) / expected!("matches")
     rule label() = _node__(LABEL, <()()_back__(<()ident()>) / ()_back__(<()string()>)>)
-    rule repeat_rest() = _node__(REPEAT_REST, <()()_back__(<()_tok__(STAR, <"*">) _opt__(<()()_back__(<()number()>)>)>)>)
-    rule repeat() = _node__(REPEAT, <()()_back__(<()_tok__(PLUS, <"+">)>) / ()_back__(<()number() _opt__(<()()_back__(<()repeat_rest()>)>)>) / ()_back__(<()repeat_rest()>)>)
-    rule pat_expect() = _node__(PAT_EXPECT, <()()_back__(<()_tok__(AT, <"@">) label()>)>)
-    rule pat_atom() = _node__(PAT_ATOM, <()()_back__(<()ident() !_quiet__(<()()_back__(<()_() _tok__(EQ, <"=">)>)>)>) / ()_back__(<()string()>) / ()_back__(<()matches()>) / ()_back__(<()_tok__(L_BRACK, <"[">) _() pat_choice() _() _tok__(R_BRACK, <"]">)>) / ()_back__(<()_tok__(L_PAREN, <"(">) _() pat_choice() _() _tok__(R_PAREN, <")">)>)>)
-    rule pat_op() = _node__(PAT_OP, <()()_back__(<()_tok__(AMP, <"&">) pat_atom()>) / ()_back__(<()_tok__(BANG, <"!">) pat_atom()>) / ()_back__(<()_tok__(TILDE, <"~">) pat_atom()>) / ()_back__(<()_tok__(DOLLAR, <"$">) pat_atom()>) / ()_back__(<()repeat() _() pat_atom()>) / ()_back__(<()pat_atom()>)>)
+    rule repeat_rest() = _node__(REPEAT_REST, <()()_back__(<()_tok__(STAR, <()"*">) _back__(<()()_back__(<()number()>)>)?>)>)
+    rule repeat() = _node__(REPEAT, <()()_back__(<()_tok__(PLUS, <()"+">)>) / ()_back__(<()number() _back__(<()()_back__(<()repeat_rest()>)>)?>) / ()_back__(<()repeat_rest()>)>)
+    rule pat_expect() = _node__(PAT_EXPECT, <()()_back__(<()_tok__(AT, <()"@">) label()>)>)
+    rule pat_atom() = _node__(PAT_ATOM, <()()_back__(<()ident() !_quiet__(<()()_back__(<()_() _tok__(EQ, <()"=">)>)>)>) / ()_back__(<()string()>) / ()_back__(<()matches()>) / ()_back__(<()_tok__(L_BRACK, <()"[">) _() pat_choice() _() _tok__(R_BRACK, <()"]">)>) / ()_back__(<()_tok__(L_PAREN, <()"(">) _() pat_choice() _() _tok__(R_PAREN, <()")">)>)>)
+    rule pat_op() = _node__(PAT_OP, <()()_back__(<()_tok__(AMP, <()"&">) pat_atom()>) / ()_back__(<()_tok__(BANG, <()"!">) pat_atom()>) / ()_back__(<()_tok__(TILDE, <()"~">) pat_atom()>) / ()_back__(<()_tok__(DOLLAR, <()"$">) pat_atom()>) / ()_back__(<()repeat() _() pat_atom()>) / ()_back__(<()pat_atom()>)>)
     rule pat_list() = _node__(PAT_LIST, <()()_back__(<()pat_op() _back__(<()()_back__(<()_() pat_op()>)>)*>)>)
-    rule pat_choice() = _node__(PAT_CHOICE, <()()_back__(<()pat_list() _back__(<()()_back__(<()_() _tok__(SLASH, <"/">) _() pat_list()>)>)* _opt__(<()()_back__(<()_() pat_expect()>)>)>)>)
-    rule named() = _node__(NAMED, <()()_back__(<()ident() _() _tok__(EQ, <"=">) _()>)>)
+    rule pat_choice() = _node__(PAT_CHOICE, <()()_back__(<()pat_list() _back__(<()()_back__(<()_() _tok__(SLASH, <()"/">) _() pat_list()>)>)* _back__(<()()_back__(<()_() pat_expect()>)>)?>)>)
+    rule named() = _node__(NAMED, <()()_back__(<()ident() _() _tok__(EQ, <()"=">) _()>)>)
     rule decl() = _node__(DECL, <()()_back__(<()named() pat_choice()>)>)
-    rule export() = _node__(EXPORT, <()()_back__(<()_opt__(<()()_back__(<()named()>)>) ident()>)>)
-    rule export_list() = _node__(EXPORT_LIST, <()()_back__(<()_tok__(EXPORTS_KW, <"exports">) _() _tok__(L_BRACK, <"[">) _() _back__(<()()_back__(<()export() _()>)>)* _tok__(R_BRACK, <"]">)>)>)
-    pub rule decl_list() = _node__(DECL_LIST, <()()_back__(<()_() _opt__(<()()_back__(<()export_list() _()>)>) _back__(<()()_back__(<()decl() _()>)>)+>)>)
+    rule export() = _node__(EXPORT, <()()_back__(<()_back__(<()()_back__(<()named()>)>)? ident()>)>)
+    rule export_list() = _node__(EXPORT_LIST, <()()_back__(<()_tok__(EXPORTS_KW, <()"exports">) _() _tok__(L_BRACK, <()"[">) _() _back__(<()()_back__(<()export() _()>)>)* _tok__(R_BRACK, <()"]">)>)>)
+    pub rule decl_list() = _node__(DECL_LIST, <()()_back__(<()_() _back__(<()()_back__(<()export_list() _()>)>)? _back__(<()()_back__(<()decl() _()>)>)+>)>)
 });
 #[repr(u16)]
 #[allow(non_camel_case_types)]
