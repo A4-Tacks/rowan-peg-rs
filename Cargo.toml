@@ -24,6 +24,6 @@ getopts-macro = "0.1.8"
 linked-hash-map = "0.5.6"
 peg = "0.8.5"
 rowan = "0.15.15"
-rowan-peg-utils = { version = "0.1.0", path = "rowan-peg-utils" }
+rowan-peg-utils = "0.1.0"
 to-true = "0.1.1"
 unicode-ident = "1.0.18"
