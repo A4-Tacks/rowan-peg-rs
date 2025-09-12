@@ -164,39 +164,42 @@ impl Language for Lang {
 pub type SyntaxNode = ::rowan::SyntaxNode<Lang>;
 pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
 "#};
-const PRE_DEFINE_RULES: &str = {
-r#"
-    rule _back__(r: rule<()>) = g:({ state.guard_none() }) r() { g.accept_none() }
-    rule _quiet__(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} { g.accept_none() }
-    rule _tok__(k: SyntaxKind, r: rule<()>) = (g:({state.quiet().guard_token(k)}) s:$(quiet!{r()}) { g.accept_token(s) })
-    rule _node__(k: SyntaxKind, r: rule<()>) = (g:({state.guard(k)}) r() { g.accept() })
-"#};
+const PRE_DEFINE_RULES: &str = r#""#;
 
 impl<W: fmt::Write> Processor<W> {
     fn gen_tok_wrap<F, R>(&mut self, kind: &str, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "_tok__({kind}, <()").unwrap();
+        write!(self.out, "(g:({{state.quiet().guard_token({kind})}}) s:$((quiet!{{").unwrap();
         let result = f(self);
-        write!(self.out, ">)").unwrap();
+        write!(self.out, "}})) {{g.accept_token(s)}})").unwrap();
+        result
+    }
+
+    fn gen_node_wrap<F, R>(&mut self, kind: &str, f: F) -> R
+    where F: FnOnce(&mut Self) -> R,
+    {
+        write!(self.out, "(g:({{state.guard({kind})}}) (").unwrap();
+        let result = f(self);
+        write!(self.out, ") {{g.accept()}})").unwrap();
         result
     }
 
     fn gen_quiet_wrap<F, R>(&mut self, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "_quiet__(<()").unwrap();
+        write!(self.out, "(g:({{state.quiet().guard_none()}}) (quiet!{{").unwrap();
         let result = f(self);
-        write!(self.out, ">)").unwrap();
+        write!(self.out, "}}) {{g.accept_none()}})").unwrap();
         result
     }
 
     fn gen_back_wrap<F, R>(&mut self, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "_back__(<()").unwrap();
+        write!(self.out, "(g:({{state.guard_none()}})(").unwrap();
         let result = f(self);
-        write!(self.out, ">)").unwrap();
+        write!(self.out, "){{g.accept_none()}})").unwrap();
         result
     }
 
@@ -369,18 +372,18 @@ impl<W: fmt::Write> Processor<W> {
                 writeln!(self.out, "    pub rule {new_name}() = {name}").unwrap();
             }
         }
-        if self.is_token_decl {
-            write!(self.out, "    {vis}rule {name}() = ()").unwrap();
-        } else {
-            write!(self.out, "    {vis}rule {name}() = _node__({kind_name}, <()").unwrap();
-        }
 
         self.refs_bound.clear();
-        self.process_pat_choice(decl.pat_choice())?;
-
-        if !self.is_token_decl {
-            write!(self.out, ">)").unwrap();
+        write!(self.out, "    {vis}rule {name}() = ").unwrap();
+        if self.is_token_decl {
+            write!(self.out, "()").unwrap();
+            self.process_pat_choice(decl.pat_choice())?;
+        } else {
+            self.gen_node_wrap(&kind_name, |this| {
+                this.process_pat_choice(decl.pat_choice())
+            })?;
         }
+
         writeln!(self.out).unwrap();
         let methods = self.refs_bound.iter().filter_map(|(name, bound)| {
             let ty = match bound {
