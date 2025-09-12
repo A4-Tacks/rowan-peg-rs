@@ -1,257 +1,19 @@
 use core::fmt;
-use std::{collections::HashSet, fmt::Display, mem::{self, take}};
+use std::{collections::HashSet, mem::take};
 use linked_hash_map::LinkedHashMap as HashMap;
 
-use rowan::{ast::{support, AstChildren, AstNode}, Language, NodeOrToken, SyntaxKind};
-use rowan_peg_utils as rpu;
+use rowan::ast::AstNode;
 use to_true::{InTrue, ToTrue};
 use unicode_ident::is_xid_continue;
 
 use crate::utils::UsedBound;
 
 mod utils;
+mod bootstarp;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Lang {}
-impl Language for Lang {
-    type Kind = Kind;
+pub use bootstarp::*;
 
-    fn kind_to_raw(kind: Self::Kind) -> SyntaxKind {
-        kind.into()
-    }
-
-    fn kind_from_raw(raw: SyntaxKind) -> Self::Kind {
-        raw.into()
-    }
-}
-
-pub type SyntaxNode = rowan::SyntaxNode<Lang>;
-pub type SyntaxToken = rowan::SyntaxToken<Lang>;
-
-#[repr(u16)]
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Kind {
-    COMMENT = 0,
-    WHITESPACE,
-    TRIVIA,
-
-    PLUS,
-    STAR,
-    AMP,
-    BANG,
-    TILDE,
-    DOLLAR,
-    EQ,
-    AT,
-    SLASH,
-    L_BRACK,
-    L_PAREN,
-    R_BRACK,
-    R_PAREN,
-    IDENT,
-    NUMBER,
-    STRING,
-    MATCHES,
-    EXPORTS_KW,
-
-    LABEL,
-    REPEAT,
-    REPEAT_REST,
-    PAT_EXPECTED,
-    PATATOM,
-    PATOP,
-    PATLIST,
-    PATCHOICE,
-    DECL,
-    NAMED,
-    EXPORT,
-    EXPORT_LIST,
-    DECL_LIST,
-}
-
-impl From<SyntaxKind> for Kind {
-    fn from(value: SyntaxKind) -> Self {
-        assert!(value.0 <= Self::DECL_LIST as u16);
-        unsafe { mem::transmute::<u16, Kind>(value.0) }
-    }
-}
-impl From<Kind> for SyntaxKind {
-    fn from(value: Kind) -> Self {
-        SyntaxKind(value as u16)
-    }
-}
-
-peg::parser!(pub grammar parser<'b>(state: &'b rpu::ParseState<'input>) for str {
-    use Kind::*;
-
-    rule guard(k: Kind) -> rpu::RuleGuard<'b, 'input> = { state.guard(k) }
-    rule guard_none() -> rpu::RuleGuard<'b, 'input> = { state.guard_none() }
-    rule back(r: rule<()>) = g:guard_none() r() {g.accept_none();}
-    rule opt(r: rule<()>) = back(<r()>)?
-    rule quiet(r: rule<()>) = g:({state.quiet().guard_none()}) quiet!{r()} {g.accept_none();}
-    rule tok(k: Kind, r: rule<()>) = (
-        g:({state.quiet().guard_token(k)})
-        s:$(quiet!{r()})
-        {
-            g.accept_token(s);
-        })
-    rule node(k: Kind, r: rule<()>) = (g:({state.guard(k)}) r() {g.accept();})
-
-    rule comment() = tok(COMMENT, <";" [^'\n']*>) / expected!("comment")
-    rule whitespace() = tok(WHITESPACE, <()[' '|'\t'|'\r'|'\n']*>)
-    rule _() = node(TRIVIA, <whitespace() back(<comment() whitespace()>)*>)
-    rule ident()
-        = tok(IDENT, <
-            !['0'..='9'] (
-                ['0'..='9' | 'a'..='z' | 'A'..='Z' | '-' | '_']
-                / [^'\x00'..='\u{a0}']
-            )+
-        >)
-        / expected!("ident")
-    rule number()
-        = tok(NUMBER, <()['0'..='9']+>)
-        / expected!("number")
-    rule string()
-        = tok(STRING, <"\"" s:$([^'"' | '\r' | '\n']*) "\"">)
-        / expected!("string")
-    rule matches()
-        = tok(MATCHES, <"<" s:$([^'>' | '\r' | '\n']*) ">">) / expected!("string")
-    rule label()
-        = node(LABEL, <()ident()>)
-        / node(LABEL, <()string()>)
-    rule repeat_rest()
-        = node(REPEAT_REST, <tok(STAR, <"*">) number()?>)
-    rule repeat()
-        = node(REPEAT, <()tok(PLUS, <"+">)>)
-        / node(REPEAT, <()number() repeat_rest()?>)
-        / node(REPEAT, <()repeat_rest()>)
-    rule pat_expected()
-        = node(PAT_EXPECTED, <tok(AT, <"@">) label()>)
-
-    rule patatom()
-        = node(PATATOM, <()ident() !quiet(<_ "=">)>)
-        / node(PATATOM, <()string() >)
-        / node(PATATOM, <()matches()>)
-        / node(PATATOM, <()tok(L_BRACK, <"[">) _ patchoice() _ tok(R_BRACK, <"]">)>)
-        / node(PATATOM, <()tok(L_PAREN, <"(">) _ patchoice() _ tok(R_PAREN, <")">)>)
-    rule patop()
-        = node(PATOP, <()tok(AMP,    <"&">) patatom()>)
-        / node(PATOP, <()tok(BANG,   <"!">) patatom()>)
-        / node(PATOP, <()tok(TILDE,  <"~">) patatom()>)
-        / node(PATOP, <()tok(DOLLAR, <"$">) patatom()>)
-        / node(PATOP, <()repeat() _         patatom()>)
-        / node(PATOP, <()patatom()>)
-    rule patlist()
-        = node(PATLIST, <()patop() back(<_ patop()>)*>)
-    rule patchoice()
-        = node(PATCHOICE, <()patlist() back(<_ tok(SLASH, <"/">) _ patlist()>)* opt(<_ pat_expected()>)>)
-    rule named()
-        = node(NAMED, <ident() _ tok(EQ, <"=">) _>)
-    rule decl()
-        = node(DECL, <named() patchoice()>)
-    rule export() = node(EXPORT, <named()? ident()>)
-    rule export_list()
-        = node(EXPORT_LIST, <
-            tok(EXPORTS_KW, <"exports">)
-            _ tok(L_BRACK, <"[">) _ back(<export() _>)* tok(R_BRACK, <"]">)
-        >)
-    pub
-    rule decl_list()
-        = node(DECL_LIST, <_ (export_list() _)? back(<decl() _>)+>)
-});
-
-macro_rules! decl_ast_node {
-    ($node:ident, $kind:ident) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $node(SyntaxNode);
-        impl AstNode for $node {
-            type Language = Lang;
-
-            fn syntax(&self) -> &rowan::SyntaxNode<Self::Language> {
-                &self.0
-            }
-
-            fn can_cast(kind: <Self::Language as Language>::Kind) -> bool {
-                kind == Kind::$kind
-            }
-
-            fn cast(node: rowan::SyntaxNode<Self::Language>) -> Option<Self> {
-                if Self::can_cast(node.kind()) {
-                    Some(Self(node))
-                } else {
-                    None
-                }
-            }
-        }
-        impl Display for $node {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                Display::fmt(self.syntax(), f)
-            }
-        }
-    };
-}
-decl_ast_node!(Trivia, TRIVIA);
-decl_ast_node!(Label, LABEL);
-decl_ast_node!(RepeatRest, REPEAT_REST);
-decl_ast_node!(Repeat, REPEAT);
-decl_ast_node!(PatExpected, PAT_EXPECTED);
-decl_ast_node!(Patatom, PATATOM);
-decl_ast_node!(Patop, PATOP);
-decl_ast_node!(Patlist, PATLIST);
-decl_ast_node!(Patchoice, PATCHOICE);
-decl_ast_node!(Decl, DECL);
-decl_ast_node!(Named, NAMED);
-decl_ast_node!(Export, EXPORT);
-decl_ast_node!(ExportList, EXPORT_LIST);
-decl_ast_node!(DeclList, DECL_LIST);
-
-impl Trivia {
-    pub fn comments(&self) -> impl Iterator<Item = SyntaxToken> {
-        self.syntax()
-            .children_with_tokens()
-            .filter_map(NodeOrToken::into_token)
-            .filter(|tok| tok.kind() == Kind::COMMENT)
-    }
-
-    pub fn whitespaces(&self) -> impl Iterator<Item = SyntaxToken> {
-        self.syntax()
-            .children_with_tokens()
-            .filter_map(NodeOrToken::into_token)
-            .filter(|tok| tok.kind() == Kind::WHITESPACE)
-    }
-}
-impl Label {
-    pub fn ident(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::IDENT)
-    }
-
-    pub fn string(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::STRING)
-    }
-}
-impl RepeatRest {
-    pub fn number(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::NUMBER)
-    }
-
-    pub fn star(&self) -> SyntaxToken {
-        support::token(self.syntax(), Kind::STAR).unwrap()
-    }
-}
 impl Repeat {
-    pub fn plus(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::PLUS)
-    }
-
-    pub fn number(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::NUMBER)
-    }
-
-    pub fn repeat_rest(&self) -> Option<RepeatRest> {
-        support::child(self.syntax())
-    }
-
     pub fn count_bounds(&self) -> (u32, Option<u32>) {
         if self.plus().is_some() {
             (1, None)
@@ -267,123 +29,9 @@ impl Repeat {
         }
     }
 }
-impl PatExpected {
-    pub fn label(&self) -> Label {
-        support::child(self.syntax()).unwrap()
-    }
-}
-impl Patatom {
-    pub fn ident(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::IDENT)
-    }
-
-    pub fn string(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::STRING)
-    }
-
-    pub fn matches(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::MATCHES)
-    }
-
-    pub fn l_brack(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::L_BRACK)
-    }
-
-    pub fn l_paren(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::L_PAREN)
-    }
-
-    pub fn r_brack(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::R_BRACK)
-    }
-
-    pub fn r_paren(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::R_PAREN)
-    }
-
-    pub fn patchoice(&self) -> Option<Patchoice> {
-        support::child(self.syntax())
-    }
-}
-impl Patop {
-    pub fn repeat(&self) -> Option<Repeat> {
-        support::child(self.syntax())
-    }
-
-    pub fn patatom(&self) -> Patatom {
-        support::child(self.syntax()).unwrap()
-    }
-
-    pub fn amp(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::AMP)
-    }
-
-    pub fn bang(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::BANG)
-    }
-
-    pub fn tilde(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::TILDE)
-    }
-
-    pub fn dollar(&self) -> Option<SyntaxToken> {
-        support::token(self.syntax(), Kind::DOLLAR)
-    }
-}
-impl Patlist {
-    pub fn patops(&self) -> AstChildren<Patop> {
-        support::children(self.syntax())
-    }
-}
-impl Patchoice {
-    pub fn patlists(&self) -> AstChildren<Patlist> {
-        support::children(self.syntax())
-    }
-
-    pub fn pat_expected(&self) -> Option<PatExpected> {
-        support::child(self.syntax())
-    }
-}
-impl Named {
-    pub fn ident(&self) -> SyntaxToken {
-        support::token(self.syntax(), Kind::IDENT).unwrap()
-    }
-}
-impl Export {
-    pub fn named(&self) -> Option<Named> {
-        support::child(self.syntax())
-    }
-
-    pub fn ident(&self) -> SyntaxToken {
-        support::token(self.syntax(), Kind::IDENT).unwrap()
-    }
-}
-impl ExportList {
-    pub fn exports(&self) -> AstChildren<Export> {
-        support::children(self.syntax())
-    }
-}
-impl Decl {
-    pub fn named(&self) -> Named {
-        support::child(self.syntax()).unwrap()
-    }
-
-    pub fn patchoice(&self) -> Patchoice {
-        support::child(self.syntax()).unwrap()
-    }
-}
-impl DeclList {
-    pub fn export_list(&self) -> Option<ExportList> {
-        support::child(self.syntax())
-    }
-
-    pub fn decls(&self) -> AstChildren<Decl> {
-        support::children(self.syntax())
-    }
-}
 
 pub mod value {
-    use crate::{Kind, Label, SyntaxToken};
+    use crate::{SyntaxKind as Kind, Label, SyntaxToken};
 
     #[track_caller]
     pub fn string(s: &SyntaxToken) -> &str {
@@ -534,7 +182,7 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     fn regist_tok_name(&mut self, token: &SyntaxToken) -> Result<(String, String)> {
-        let content = if token.kind() == Kind::STRING { value::string(token) } else { value::matches(token) };
+        let content = if token.kind() == SyntaxKind::STRING { value::string(token) } else { value::matches(token) };
         if content.is_empty() {
             return Err(Error::EmptyLiteral(token.clone()));
         }
@@ -579,7 +227,7 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     pub fn start_process(&mut self, decl_list: &DeclList) -> Result<()> {
-        for export in decl_list.export_list().iter().flat_map(|list| list.exports()) {
+        for export in decl_list.export_list().iter().flat_map(|list| list.export()) {
             let name = export.ident();
             let new_name = export.named()
                 .map_or(name.clone(), |it| it.ident());
@@ -595,7 +243,7 @@ impl<W: fmt::Write> Processor<W> {
             &'b ::rowan_peg_utils::ParseState<'input>) for str {{").unwrap();
         writeln!(self.out, "    use SyntaxKind::*;").unwrap();
         writeln!(self.out, "{PRE_DEFINE_RULES}").unwrap();
-        for decl in decl_list.decls() {
+        for decl in decl_list.decl() {
             self.process_decl(decl)?;
         }
         writeln!(self.out, "}});").unwrap();
@@ -669,13 +317,13 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     fn decl_is_token(&self, decl: &Decl) -> bool {
-        let Some(list) = utils::one_elem(decl.patchoice().patlists()) else { return false };
-        let Some(op) = utils::one_elem(list.patops()) else { return false };
+        let Some(list) = utils::one_elem(decl.pat_choice().pat_list()) else { return false };
+        let Some(op) = utils::one_elem(list.pat_op()) else { return false };
         if op.dollar().is_some() {
             return true;
         }
-        op.patatom().syntax().text_range() != op.syntax().text_range()
-            && op.patatom().string().is_some()
+        op.pat_atom().syntax().text_range() != op.syntax().text_range()
+            && op.pat_atom().string().is_some()
     }
 
     fn process_decl(&mut self, decl: Decl) -> Result<()> {
@@ -702,7 +350,7 @@ impl<W: fmt::Write> Processor<W> {
         }
 
         self.refs_bound.clear();
-        self.process_pat_choice(decl.patchoice())?;
+        self.process_pat_choice(decl.pat_choice())?;
 
         if !self.is_token_decl {
             write!(self.out, ">)").unwrap();
@@ -722,11 +370,11 @@ impl<W: fmt::Write> Processor<W> {
         Ok(())
     }
 
-    fn process_pat_choice(&mut self, patchoice: Patchoice) -> Result<()> {
+    fn process_pat_choice(&mut self, patchoice: PatChoice) -> Result<()> {
         let mut first = true;
         let refs_bound = self.take_refs_bound();
         let mut prev_bound: Option<HashMap<String, UsedBound>> = None;
-        for patlist in patchoice.patlists() {
+        for patlist in patchoice.pat_list() {
             first.in_false(|| write!(self.out, " / ").unwrap());
             write!(self.out, "()_back__(<()").unwrap();
             self.process_pat_list(patlist)?;
@@ -740,7 +388,7 @@ impl<W: fmt::Write> Processor<W> {
         assert_eq!(self.refs_bound.len(), 0);
         self.merge_add(refs_bound);
         self.merge_add(prev_bound.unwrap());
-        if let Some(expected) = patchoice.pat_expected() {
+        if let Some(expected) = patchoice.pat_expect() {
             let name = value::label(&expected.label());
             write!(self.out, " / expected!({name:?})").unwrap();
         }
@@ -766,17 +414,17 @@ impl<W: fmt::Write> Processor<W> {
         }
     }
 
-    fn process_pat_list(&mut self, patlist: Patlist) -> Result<()> {
+    fn process_pat_list(&mut self, patlist: PatList) -> Result<()> {
         let mut first = true;
-        for patop in patlist.patops() {
+        for patop in patlist.pat_op() {
             first.in_false(|| write!(self.out, " ").unwrap());
             self.process_patop(patop)?;
         }
         Ok(())
     }
 
-    fn process_patop(&mut self, patop: Patop) -> Result<()> {
-        let atom = patop.patatom();
+    fn process_patop(&mut self, patop: PatOp) -> Result<()> {
+        let atom = patop.pat_atom();
         if patop.amp().is_some() {
             write!(self.out, "&_quiet__(<()").unwrap();
             self.dis_refs_bound(|this| this.process_patatom(atom))?;
@@ -824,13 +472,13 @@ impl<W: fmt::Write> Processor<W> {
         Ok(())
     }
 
-    fn process_patatom(&mut self, atom: Patatom) -> Result<()> {
+    fn process_patatom(&mut self, atom: PatAtom) -> Result<()> {
         if atom.l_paren().is_some() {
-            self.process_pat_choice(atom.patchoice().unwrap())?;
+            self.process_pat_choice(atom.pat_choice().unwrap())?;
         } else if atom.l_brack().is_some() {
             let refs_bound = self.take_refs_bound();
             write!(self.out, "_opt__(<()").unwrap();
-            self.process_pat_choice(atom.patchoice().unwrap())?;
+            self.process_pat_choice(atom.pat_choice().unwrap())?;
             write!(self.out, ">)").unwrap();
             self.refs_bound.iter_mut().for_each(|(_, bound)| bound.0 = 0);
             self.merge_add(refs_bound);
@@ -862,7 +510,7 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     fn tok_or_in_slice(&mut self, token: &SyntaxToken) -> Result<()> {
-        let content = if token.kind() == Kind::STRING {
+        let content = if token.kind() == SyntaxKind::STRING {
             value::string(token)
         } else {
             value::matches(token)
@@ -926,8 +574,8 @@ patchoice   = patlist *(_ "/" _ patlist)
 decl        = ident _ "=" _ patchoice
 decl-list   = +(_ decl) _
     "#;
-        let mut state = rpu::ParseState::default();
-        parser::decl_list(s, &state).unwrap();
+        let mut state = rowan_peg_utils::ParseState::default();
+        decl_list(s, &state).unwrap();
         dbg!(&state);
         let node = SyntaxNode::new_root(state.finish());
         dbg!(&node);

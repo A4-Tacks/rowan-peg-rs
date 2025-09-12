@@ -16,7 +16,7 @@ exports [
 comment     = $(";" *<^\n>) @comment
 whitespace  = $(*< \t\r\n>)
 _           = whitespace *(comment whitespace)
-ident       = $(!<0-9> *(<0-9a-zA-Z_->/<^\u{00}-\u{a0}>)) @ident
+ident       = $(!<0-9> +(<0-9a-zA-Z_->/<^\u{00}-\u{a0}>)) @ident
 number      = $(+<0-9>) @number
 string      = $(<"> *<^\"\r\n> <">) @string
 matches     = $("<" *<^\x3e\r\n> ">") @matches
