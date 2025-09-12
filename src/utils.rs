@@ -197,6 +197,7 @@ const PUNCT_NAMES: &[(&str, &str)] = &[
     ("+", "plus"),
     ("*", "star"),
     ("/", "slash"),
+    ("\\", "backslash"),
     ("^", "caret"),
     ("%", "percent"),
     ("_", "underscore"),
@@ -231,4 +232,6 @@ const PUNCT_NAMES: &[(&str, &str)] = &[
     (">>", "shr"),
     ("<<=", "shleq"),
     (">>=", "shreq"),
+    ("'", "single_quote"),
+    ("\"", "double_quote"),
 ];

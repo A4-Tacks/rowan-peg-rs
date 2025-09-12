@@ -4,7 +4,7 @@ use linked_hash_map::LinkedHashMap as HashMap;
 
 use rowan::ast::AstNode;
 use to_true::{InTrue, ToTrue};
-use unicode_ident::is_xid_continue;
+use unicode_ident::{is_xid_continue, is_xid_start};
 
 use crate::utils::UsedBound;
 
@@ -70,6 +70,7 @@ pub enum Error {
 
 type Result<T, E = Error> = core::result::Result<T, E>;
 
+#[derive(Debug, PartialEq, Eq)]
 enum Method {
     Optional,
     Strict,
@@ -217,10 +218,10 @@ impl<W: fmt::Write> Processor<W> {
         }
         let (name, kind_name) = if let Some(name) = utils::punct_name_of(content) {
             (name.to_owned(), utils::kind_name_of(&name))
-        } else if content.chars()
-            .all(|ch| matches!(ch, '-' | '_') || is_xid_continue(ch))
+        } else if is_xid_start(content.chars().next().unwrap())
+            && content.chars().all(|ch| matches!(ch, '-' | '_') || is_xid_continue(ch))
         {
-            let name = utils::rule_name_of(content)+"_kw";
+            let name = utils::rule_name_of(&format!("{content}_kw"));
             let kind_name = utils::kind_name_of(&name);
             (name, kind_name)
         } else {
@@ -256,7 +257,7 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     pub fn start_process(&mut self, decl_list: &DeclList) -> Result<()> {
-        for export in decl_list.export_list().iter().flat_map(|list| list.export()) {
+        for export in decl_list.export_list().iter().flat_map(|list| list.exports()) {
             let name = export.ident();
             let new_name = export.named()
                 .map_or(name.clone(), |it| it.ident());
@@ -271,7 +272,7 @@ impl<W: fmt::Write> Processor<W> {
             &'b ::rowan_peg_utils::ParseState<'input>) for str {{").unwrap();
         writeln!(self.out, "    use SyntaxKind::*;").unwrap();
         writeln!(self.out, "{PRE_DEFINE_RULES}").unwrap();
-        for decl in decl_list.decl() {
+        for decl in decl_list.decls() {
             self.process_decl(decl)?;
         }
         writeln!(self.out, "}});").unwrap();
@@ -309,12 +310,12 @@ impl<W: fmt::Write> Processor<W> {
 
             writeln!(self.out, "decl_ast_node!({node_name}, {node_kind});").unwrap();
             writeln!(self.out, "impl {node_name} {{").unwrap();
-            for (method_name, method) in methods {
-                let is_token = self.is_tokens.contains(&method_name);
+            for (child_name, method) in methods {
+                let is_token = self.is_tokens.contains(&child_name);
                 let mut base_ty = if is_token {
                     "SyntaxToken".to_owned()
                 } else {
-                    utils::node_name_of(&method_name)
+                    utils::node_name_of(&child_name)
                 };
                 match method {
                     Method::Optional => base_ty = format!("Option<{base_ty}>"),
@@ -322,7 +323,7 @@ impl<W: fmt::Write> Processor<W> {
                     Method::Many => base_ty = format!("AstChildren<{base_ty}>"),
                 }
                 let body = if is_token {
-                    let kind = utils::kind_name_of(&method_name);
+                    let kind = utils::kind_name_of(&child_name);
                     match method {
                         Method::Optional => format!("support::token(self.syntax(), SyntaxKind::{kind})"),
                         Method::Strict => format!("support::token(self.syntax(), SyntaxKind::{kind}).unwrap()"),
@@ -335,6 +336,15 @@ impl<W: fmt::Write> Processor<W> {
                         Method::Many => "support::children(self.syntax())",
                     }.into()
                 };
+                let method_name = if method == Method::Many {
+                    if child_name.ends_with('s') {
+                        format!("{child_name}es")
+                    } else {
+                        format!("{child_name}s")
+                    }
+                } else {
+                    child_name
+                };
                 writeln!(self.out, "    pub fn {method_name}(&self) -> {base_ty} {{").unwrap();
                 writeln!(self.out, "        {body}").unwrap();
                 writeln!(self.out, "    }}").unwrap();
@@ -345,8 +355,8 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     fn decl_is_token(&self, decl: &Decl) -> bool {
-        let Some(list) = utils::one_elem(decl.pat_choice().pat_list()) else { return false };
-        let Some(op) = utils::one_elem(list.pat_op()) else { return false };
+        let Some(list) = utils::one_elem(decl.pat_choice().pat_lists()) else { return false };
+        let Some(op) = utils::one_elem(list.pat_ops()) else { return false };
         if op.dollar().is_some() {
             return true;
         }
@@ -402,7 +412,7 @@ impl<W: fmt::Write> Processor<W> {
         let mut first = true;
         let refs_bound = self.take_refs_bound();
         let mut prev_bound: Option<HashMap<String, UsedBound>> = None;
-        for patlist in patchoice.pat_list() {
+        for patlist in patchoice.pat_lists() {
             first.in_false(|| write!(self.out, " / ").unwrap());
             write!(self.out, "()").unwrap();
             self.gen_back_wrap(|this| this.process_pat_list(patlist))?;
@@ -443,7 +453,7 @@ impl<W: fmt::Write> Processor<W> {
 
     fn process_pat_list(&mut self, patlist: PatList) -> Result<()> {
         let mut first = true;
-        for patop in patlist.pat_op() {
+        for patop in patlist.pat_ops() {
             first.in_false(|| write!(self.out, " ").unwrap());
             self.process_patop(patop)?;
         }

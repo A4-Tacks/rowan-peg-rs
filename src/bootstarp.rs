@@ -191,7 +191,7 @@ impl PatAtom {
     pub fn string(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::STRING)
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
@@ -221,10 +221,10 @@ impl PatOp {
 }
 decl_ast_node!(PatList, PAT_LIST);
 impl PatList {
-    pub fn pat_op(&self) -> AstChildren<PatOp> {
+    pub fn pat_ops(&self) -> AstChildren<PatOp> {
         support::children(self.syntax())
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
@@ -233,10 +233,10 @@ impl PatChoice {
     pub fn pat_expect(&self) -> Option<PatExpect> {
         support::child(self.syntax())
     }
-    pub fn pat_list(&self) -> AstChildren<PatList> {
+    pub fn pat_lists(&self) -> AstChildren<PatList> {
         support::children(self.syntax())
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
@@ -248,7 +248,7 @@ impl Named {
     pub fn ident(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::IDENT).unwrap()
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
@@ -272,7 +272,7 @@ impl Export {
 }
 decl_ast_node!(ExportList, EXPORT_LIST);
 impl ExportList {
-    pub fn export(&self) -> AstChildren<Export> {
+    pub fn exports(&self) -> AstChildren<Export> {
         support::children(self.syntax())
     }
     pub fn exports_kw(&self) -> SyntaxToken {
@@ -284,19 +284,19 @@ impl ExportList {
     pub fn r_brack(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::R_BRACK).unwrap()
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
 decl_ast_node!(DeclList, DECL_LIST);
 impl DeclList {
-    pub fn decl(&self) -> AstChildren<Decl> {
+    pub fn decls(&self) -> AstChildren<Decl> {
         support::children(self.syntax())
     }
     pub fn export_list(&self) -> Option<ExportList> {
         support::child(self.syntax())
     }
-    pub fn trivia(&self) -> AstChildren<Trivia> {
+    pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())
     }
 }
