@@ -70,7 +70,6 @@ pub struct ParseState<'a> {
     actions: RefCell<Vec<Action<'a>>>,
     quiet: Cell<u32>,
     builder: GreenNodeBuilder<'static>,
-    exclude_empty: bool,
 }
 
 impl<'a> ParseState<'a> {
@@ -115,7 +114,7 @@ impl<'a> ParseState<'a> {
         for action in self.actions.get_mut().drain(..) {
             match action {
                 Action::Token(kind, text) => {
-                    if !text.is_empty() || !self.exclude_empty {
+                    if !text.is_empty() {
                         self.builder.token(kind, text)
                     }
                 }
@@ -124,9 +123,5 @@ impl<'a> ParseState<'a> {
             }
         }
         take(&mut self.builder).finish()
-    }
-
-    pub fn set_exclude_empty(&mut self, exclude_empty: bool) {
-        self.exclude_empty = exclude_empty;
     }
 }

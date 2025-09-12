@@ -7,4 +7,4 @@ edition = "2024"
 char-classes = "0.3.2"
 peg = "0.8.5"
 rowan = "0.15.15"
-rowan-peg-utils = { version = "0.1.0", path = "../../rowan-peg-utils" }
+rowan-peg-utils = { version = "*", path = "../../rowan-peg-utils" }
