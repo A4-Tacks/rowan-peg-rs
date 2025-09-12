@@ -96,7 +96,7 @@ impl<'a> ParseState<'a> {
     pub fn guard(&self, kind: impl Into<SyntaxKind>) -> RuleGuard<'_, 'a> {
         let kind = kind.into();
         let guard = self.guard_token(kind);
-        self.action(Action::Start(kind.into()));
+        self.action(Action::Start(kind));
         guard
     }
 

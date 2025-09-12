@@ -534,8 +534,8 @@ impl<W: fmt::Write> Processor<W> {
                 return Err(Error::MatchesWithoutSlice(matches));
             }
             let content = value::matches(&matches);
-            if content.starts_with('^') {
-                write!(self.out, "#{{classes!(^\"{}\")}}", &content[1..]).unwrap();
+            if let Some(pat) = content.strip_prefix('^') {
+                write!(self.out, "#{{classes!(^\"{pat}\")}}").unwrap();
             } else {
                 write!(self.out, "#{{classes!(\"{content}\")}}").unwrap();
             }
@@ -552,7 +552,7 @@ impl<W: fmt::Write> Processor<W> {
             value::matches(token)
         };
         if self.slice == 0 {
-            let (name, kind_name) = self.regist_tok_name(&token)?;
+            let (name, kind_name) = self.regist_tok_name(token)?;
             self.add_bound(name);
             self.gen_tok_wrap(&kind_name, |this| {
                 write!(this.out, "{content:?}").unwrap();
