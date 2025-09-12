@@ -7,7 +7,7 @@ use rowan_peg_utils::ParseState;
 fn main() {
     let input = io::read_to_string(stdin().lock()).unwrap();
     let state = &mut ParseState::default();
-    rowan_peg::decl_list(&input, state).unwrap();
+    rowan_peg::parser::decl_list(&input, state).unwrap();
     let syntax_node = SyntaxNode::new_root(state.finish());
     let decl_list = DeclList::cast(syntax_node).unwrap();
     let mut buf = String::new();

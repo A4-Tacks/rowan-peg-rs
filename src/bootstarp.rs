@@ -57,8 +57,7 @@ impl Language for Lang {
 pub type SyntaxNode = ::rowan::SyntaxNode<Lang>;
 pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
 
-pub use parser::*;
-::peg::parser!(grammar parser<'b>(state: &'b ::rowan_peg_utils::ParseState<'input>) for str {
+::peg::parser!(pub grammar parser<'b>(state: &'b ::rowan_peg_utils::ParseState<'input>) for str {
     use SyntaxKind::*;
 
     rule comment() = ()()(g:({state.guard_none()})((g:({state.quiet().guard_token(COMMENT)}) s:$((quiet!{()(g:({state.guard_none()})(";" (g:({state.guard_none()})(#{classes!(^"\n")}){g.accept_none()})*){g.accept_none()})})) {g.accept_token(s)})){g.accept_none()}) / expected!("comment")

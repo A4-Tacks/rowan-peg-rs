@@ -267,8 +267,7 @@ impl<W: fmt::Write> Processor<W> {
         }
 
         writeln!(self.out, "{PRE_DEFINE_ITEMS}").unwrap();
-        writeln!(self.out, "pub use parser::*;").unwrap();
-        writeln!(self.out, "::peg::parser!(grammar parser<'b>(state: \
+        writeln!(self.out, "::peg::parser!(pub grammar parser<'b>(state: \
             &'b ::rowan_peg_utils::ParseState<'input>) for str {{").unwrap();
         writeln!(self.out, "    use SyntaxKind::*;").unwrap();
         writeln!(self.out, "{PRE_DEFINE_RULES}").unwrap();
@@ -601,7 +600,7 @@ decl        = ident _ "=" _ patchoice
 decl-list   = +(_ decl) _
     "#;
         let mut state = rowan_peg_utils::ParseState::default();
-        decl_list(s, &state).unwrap();
+        parser::decl_list(s, &state).unwrap();
         dbg!(&state);
         let node = SyntaxNode::new_root(state.finish());
         dbg!(&node);
