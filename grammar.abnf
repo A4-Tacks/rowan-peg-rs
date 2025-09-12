@@ -29,8 +29,8 @@ pat-expect  = "@" label
 pat-atom    = ident !(_ "=")            ; a rule reference
             / string                    ; keyword
             / matches                   ; char classes
-            / "[" _ pat-choice _ "]"     ; optional
-            / "(" _ pat-choice _ ")"     ; simple paren
+            / "[" _ pat-choice _ "]"    ; optional
+            / "(" _ pat-choice _ ")"    ; simple paren
 pat-op      = "&" pat-atom ; positive lookahead
             / "!" pat-atom ; negative lookahead
             / "~" pat-atom ; quiet

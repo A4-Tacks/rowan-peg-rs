@@ -3,6 +3,15 @@ name = "rowan-peg"
 version = "0.1.0"
 edition = "2024"
 
+authors = ["A4-Tacks <wdsjxhno1001@163.com>"]
+keywords = ["lossless", "parser", "rowan", "grammar"]
+categories = ["parsing"]
+description = "Convert ABNF like grammar to rust-peg build `rowan` lossless syntax tree"
+
+license = "MIT"
+repository = "https://github.com/A4-Tacks/rowan-peg-rs"
+readme = "README.md"
+
 [workspace]
 members = ["rowan-peg-utils", "examples/example-json"]
 
