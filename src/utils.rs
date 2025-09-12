@@ -2,7 +2,8 @@ use std::ops;
 use to_true::InTrue;
 
 pub fn rule_name_of(name: &str) -> String {
-    if RUST_KEYWORDS.contains(&name) {
+    let name = name.to_ascii_lowercase();
+    if RUST_KEYWORDS.contains(&&*name) {
         format!("{name}_")
     } else {
         name.replace('-', "_")
@@ -34,7 +35,7 @@ pub fn to_upper_camel(s: &str, mut upper: bool) -> String {
             upper = false;
             ch.to_ascii_uppercase()
         } else {
-            ch
+            ch.to_ascii_lowercase()
         };
         start = false;
         Some(ch)
