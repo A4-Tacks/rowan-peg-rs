@@ -31,7 +31,7 @@ array = begin-array [ value *( value-separator value ) ] end-array
 number          = [ minus ] int [ frac ] [ exp ]
 decimal-point   = $"."
 digit1-9        = $<1-9>
-DIGIT           = $<0-9>
+DIGIT           = $<0-9> @digit
 DIGITS          = $(1*DIGIT)
 e               = $("e" / "E")
 exp             = e [ minus / plus ] DIGITS
@@ -56,6 +56,7 @@ char   = unescaped /
                 "r" /          ; r    carriage return U+000D
                 "t" /          ; t    tab             U+0009
                 "u" HEXDIG4 )  ; uXXXX                U+XXXX
+            @char
 HEXDIG = $<0-9a-fA-F>
 HEXDIG4 = $(4 HEXDIG)
 escape = $"\"

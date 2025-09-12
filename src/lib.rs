@@ -172,9 +172,9 @@ impl<W: fmt::Write> Processor<W> {
     fn gen_tok_wrap<F, R>(&mut self, kind: &str, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "(g:({{state.quiet().guard_token({kind})}}) s:$((quiet!{{").unwrap();
+        write!(self.out, "(g:({{state.quiet().guard_token({kind})}}) s:$((").unwrap();
         let result = f(self);
-        write!(self.out, "}})) {{g.accept_token(s)}})").unwrap();
+        write!(self.out, ")) {{g.accept_token(s)}})").unwrap();
         result
     }
 

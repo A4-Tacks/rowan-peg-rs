@@ -1,5 +1,6 @@
+#[allow(dead_code)]
 mod grammar;
-use std::{collections::BTreeMap, env::args, fs};
+use std::{collections::BTreeMap, env::args, fs, process::exit};
 
 use grammar as ast;
 use rowan::ast::AstNode;
@@ -17,7 +18,10 @@ pub enum JsonValue {
 fn main() {
     let input = fs::read_to_string(args().nth(1).unwrap()).unwrap();
     let state = &mut rowan_peg_utils::ParseState::default();
-    ast::parser::json_text(&input, state).unwrap();
+    if let Err(e) = ast::parser::json_text(&input, state) {
+        eprintln!("parse {e}");
+        exit(1)
+    };
     let syntax_node = ast::SyntaxNode::new_root(state.finish());
     let json = ast::JsonText::cast(syntax_node).unwrap();
     dbg!(&json); // outputs too long
