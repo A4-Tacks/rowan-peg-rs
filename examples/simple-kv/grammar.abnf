@@ -1,0 +1,10 @@
+exports [ pair-list ]
+
+pair-list = whitespace *pair
+pair    = key whitespace "=" whitespace val whitespace
+key     = text
+val     = number / text
+number  = int ["." int]
+int     = $(+<0-9>) @int ; Add `int` to the expected set when parsing fails
+text    = $(+<a-zA-Z_->) @text
+whitespace = $(*< \t\r\n>)

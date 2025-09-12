@@ -18,13 +18,14 @@ Edit your grammar declaration:
 ```abnf
 exports [ pair-list ]
 
-pair-list = ws *pair
-pair = key ws val ws
-key = text
-val = number / text
-number = int ["." int]
-int = $(+<0-9>) @int ; Add `int` to the expected set when parsing fails
-text = $(+<a-zA-Z_->) @text
+pair-list = whitespace *pair
+pair    = key whitespace "=" whitespace val whitespace
+key     = text
+val     = number / text
+number  = int ["." int]
+int     = $(+<0-9>) @int ; Add `int` to the expected set when parsing fails
+text    = $(+<a-zA-Z_->) @text
+whitespace = $(*< \t\r\n>)
 ```
 
 Generate grammar from your grammar declaration:

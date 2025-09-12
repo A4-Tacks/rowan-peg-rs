@@ -13,7 +13,7 @@ repository = "https://github.com/A4-Tacks/rowan-peg-rs"
 readme = "README.md"
 
 [workspace]
-members = ["rowan-peg-utils", "examples/example-json"]
+members = ["rowan-peg-utils", "examples/example-json", "examples/simple-kv"]
 
 [features]
 trace = ["peg/trace"]

@@ -182,6 +182,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "simple-kv"
+version = "0.1.0"
+dependencies = [
+ "char-classes",
+ "peg",
+ "rowan",
+ "rowan-peg-utils 0.1.0",
+]
+
+[[package]]
 name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
