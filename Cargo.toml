@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["rowan-peg-utils"]
+members = ["rowan-peg-utils", "examples/example-json"]
 
 [features]
 trace = ["peg/trace"]

@@ -1,0 +1,13 @@
+[package]
+name = "example-json"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+trace = ["peg/trace"]
+
+[dependencies]
+char-classes = "0.3.2"
+peg = "0.8.5"
+rowan = "0.15.15"
+rowan-peg-utils = { version = "0.1.0", path = "../../rowan-peg-utils" }

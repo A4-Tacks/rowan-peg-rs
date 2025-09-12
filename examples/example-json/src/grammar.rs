@@ -1,0 +1,346 @@
+use rowan::{ast::{support, AstChildren, AstNode}, Language};
+
+macro_rules! classes {
+    ($($pat:tt)*) => {
+        |s, i| ::char_classes::FirstElem::first_elem(&s[i..])
+            .filter(::char_classes::any!($($pat)*))
+            .map_or(::peg::RuleResult::Failed, |ch| {
+                ::peg::RuleResult::Matched(i+ch.len_utf8(), ())
+            })
+    };
+}
+macro_rules! decl_ast_node {
+    ($node:ident, $kind:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub struct $node(SyntaxNode);
+        impl AstNode for $node {
+            type Language = Lang;
+
+            fn syntax(&self) -> &rowan::SyntaxNode<Self::Language> {
+                &self.0
+            }
+
+            fn can_cast(kind: <Self::Language as Language>::Kind) -> bool {
+                kind == SyntaxKind::$kind
+            }
+
+            fn cast(node: rowan::SyntaxNode<Self::Language>) -> Option<Self> {
+                if Self::can_cast(node.kind()) {
+                    Some(Self(node))
+                } else {
+                    None
+                }
+            }
+        }
+        impl core::fmt::Display for $node {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Display::fmt(self.syntax(), f)
+            }
+        }
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Lang {}
+impl Language for Lang {
+    type Kind = SyntaxKind;
+
+    fn kind_to_raw(kind: Self::Kind) -> ::rowan::SyntaxKind {
+        kind.into()
+    }
+
+    fn kind_from_raw(raw: ::rowan::SyntaxKind) -> Self::Kind {
+        raw.into()
+    }
+}
+
+pub type SyntaxNode = ::rowan::SyntaxNode<Lang>;
+pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
+
+::peg::parser!(pub grammar parser<'b>(state: &'b ::rowan_peg_utils::ParseState<'input>) for str {
+    use SyntaxKind::*;
+
+    pub rule json_text() = (g:({state.guard(JSON_TEXT)}) ((()(g:({state.guard_none()})(ws() value() ws()){g.accept_none()}))) {g.accept()})
+    rule begin_array() = (g:({state.guard(BEGIN_ARRAY)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(L_BRACK)}) s:$((quiet!{"["})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule begin_object() = (g:({state.guard(BEGIN_OBJECT)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(L_CURLY)}) s:$((quiet!{"{"})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule end_array() = (g:({state.guard(END_ARRAY)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(R_BRACK)}) s:$((quiet!{"]"})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule end_object() = (g:({state.guard(END_OBJECT)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(R_CURLY)}) s:$((quiet!{"}"})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule name_separator() = (g:({state.guard(NAME_SEPARATOR)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(COLON)}) s:$((quiet!{":"})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule value_separator() = (g:({state.guard(VALUE_SEPARATOR)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(COMMA)}) s:$((quiet!{","})) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
+    rule ws() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(WS)}) s:$((quiet!{(()(g:({state.guard_none()})((g:({state.guard_none()})(#{classes!(" \t\r\n")}){g.accept_none()})*){g.accept_none()}))})) {g.accept_token(s)})){g.accept_none()}))
+    rule value() = (g:({state.guard(VALUE)}) ((()(g:({state.guard_none()})(false_()){g.accept_none()}) / ()(g:({state.guard_none()})(null()){g.accept_none()}) / ()(g:({state.guard_none()})(true_()){g.accept_none()}) / ()(g:({state.guard_none()})(object()){g.accept_none()}) / ()(g:({state.guard_none()})(array()){g.accept_none()}) / ()(g:({state.guard_none()})(number()){g.accept_none()}) / ()(g:({state.guard_none()})(string()){g.accept_none()}))) {g.accept()})
+    rule false_() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(FALSE)}) s:$((quiet!{"false"})) {g.accept_token(s)})){g.accept_none()}))
+    rule null() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(NULL)}) s:$((quiet!{"null"})) {g.accept_token(s)})){g.accept_none()}))
+    rule true_() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(TRUE)}) s:$((quiet!{"true"})) {g.accept_token(s)})){g.accept_none()}))
+    rule object() = (g:({state.guard(OBJECT)}) ((()(g:({state.guard_none()})(begin_object() (g:({state.guard_none()})((()(g:({state.guard_none()})(member() (g:({state.guard_none()})((()(g:({state.guard_none()})(value_separator() member()){g.accept_none()}))){g.accept_none()})*){g.accept_none()}))){g.accept_none()})? end_object()){g.accept_none()}))) {g.accept()})
+    rule member() = (g:({state.guard(MEMBER)}) ((()(g:({state.guard_none()})(string() name_separator() value()){g.accept_none()}))) {g.accept()})
+    rule array() = (g:({state.guard(ARRAY)}) ((()(g:({state.guard_none()})(begin_array() (g:({state.guard_none()})((()(g:({state.guard_none()})(value() (g:({state.guard_none()})((()(g:({state.guard_none()})(value_separator() value()){g.accept_none()}))){g.accept_none()})*){g.accept_none()}))){g.accept_none()})? end_array()){g.accept_none()}))) {g.accept()})
+    rule number() = (g:({state.guard(NUMBER)}) ((()(g:({state.guard_none()})((g:({state.guard_none()})((()(g:({state.guard_none()})(minus()){g.accept_none()}))){g.accept_none()})? int() (g:({state.guard_none()})((()(g:({state.guard_none()})(frac()){g.accept_none()}))){g.accept_none()})? (g:({state.guard_none()})((()(g:({state.guard_none()})(exp()){g.accept_none()}))){g.accept_none()})?){g.accept_none()}))) {g.accept()})
+    rule decimal_point() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DECIMAL_POINT)}) s:$((quiet!{"."})) {g.accept_token(s)})){g.accept_none()}))
+    rule digit1_9() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT1_9)}) s:$((quiet!{#{classes!("1-9")}})) {g.accept_token(s)})){g.accept_none()}))
+    rule digit() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT)}) s:$((quiet!{#{classes!("0-9")}})) {g.accept_token(s)})){g.accept_none()}))
+    rule digits() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGITS)}) s:$((quiet!{(()(g:({state.guard_none()})((g:({state.guard_none()})(digit()){g.accept_none()})+){g.accept_none()}))})) {g.accept_token(s)})){g.accept_none()}))
+    rule e() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(E)}) s:$((quiet!{(()(g:({state.guard_none()})("e"){g.accept_none()}) / ()(g:({state.guard_none()})("E"){g.accept_none()}))})) {g.accept_token(s)})){g.accept_none()}))
+    rule exp() = (g:({state.guard(EXP)}) ((()(g:({state.guard_none()})(e() (g:({state.guard_none()})((()(g:({state.guard_none()})(minus()){g.accept_none()}) / ()(g:({state.guard_none()})(plus()){g.accept_none()}))){g.accept_none()})? digits()){g.accept_none()}))) {g.accept()})
+    rule frac() = (g:({state.guard(FRAC)}) ((()(g:({state.guard_none()})(decimal_point() digits()){g.accept_none()}))) {g.accept()})
+    rule int() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(INT)}) s:$((quiet!{(()(g:({state.guard_none()})(zero()){g.accept_none()}) / ()(g:({state.guard_none()})(digit1_9() (g:({state.guard_none()})(digit()){g.accept_none()})*){g.accept_none()}))})) {g.accept_token(s)})){g.accept_none()}))
+    rule minus() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(MINUS)}) s:$((quiet!{"-"})) {g.accept_token(s)})){g.accept_none()}))
+    rule plus() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(PLUS)}) s:$((quiet!{"+"})) {g.accept_token(s)})){g.accept_none()}))
+    rule zero() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(ZERO)}) s:$((quiet!{"0"})) {g.accept_token(s)})){g.accept_none()}))
+    rule string() = (g:({state.guard(STRING)}) ((()(g:({state.guard_none()})(quotation_mark() (g:({state.guard_none()})(char()){g.accept_none()})* quotation_mark()){g.accept_none()}))) {g.accept()})
+    rule char() = (g:({state.guard(CHAR)}) ((()(g:({state.guard_none()})(unescaped()){g.accept_none()}) / ()(g:({state.guard_none()})(escape() (()(g:({state.guard_none()})((g:({state.quiet().guard_token(DOUBLE_QUOTE)}) s:$((quiet!{"\""})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(BACKSLASH)}) s:$((quiet!{"\\"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(SLASH)}) s:$((quiet!{"/"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(B_KW)}) s:$((quiet!{"b"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(F_KW)}) s:$((quiet!{"f"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(N_KW)}) s:$((quiet!{"n"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(R_KW)}) s:$((quiet!{"r"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(T_KW)}) s:$((quiet!{"t"})) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(U_KW)}) s:$((quiet!{"u"})) {g.accept_token(s)}) hexdig4()){g.accept_none()}))){g.accept_none()}))) {g.accept()})
+    rule hexdig() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(HEXDIG)}) s:$((quiet!{#{classes!("0-9a-fA-F")}})) {g.accept_token(s)})){g.accept_none()}))
+    rule hexdig4() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(HEXDIG4)}) s:$((quiet!{(()(g:({state.guard_none()})((g:({state.guard_none()})(hexdig()){g.accept_none()})*<4,4>){g.accept_none()}))})) {g.accept_token(s)})){g.accept_none()}))
+    rule escape() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(ESCAPE)}) s:$((quiet!{"\\"})) {g.accept_token(s)})){g.accept_none()}))
+    rule quotation_mark() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(QUOTATION_MARK)}) s:$((quiet!{"\""})) {g.accept_token(s)})){g.accept_none()}))
+    rule unescaped() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(UNESCAPED)}) s:$((quiet!{#{classes!("\x20-\x21\x23-\x5B\x5D-\u{10ffff}")}})) {g.accept_token(s)})){g.accept_none()}))
+});
+#[repr(u16)]
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SyntaxKind {
+    JSON_TEXT = 0,
+    BEGIN_ARRAY,
+    L_BRACK,
+    BEGIN_OBJECT,
+    L_CURLY,
+    END_ARRAY,
+    R_BRACK,
+    END_OBJECT,
+    R_CURLY,
+    NAME_SEPARATOR,
+    COLON,
+    VALUE_SEPARATOR,
+    COMMA,
+    WS,
+    VALUE,
+    FALSE,
+    NULL,
+    TRUE,
+    OBJECT,
+    MEMBER,
+    ARRAY,
+    NUMBER,
+    DECIMAL_POINT,
+    DIGIT1_9,
+    DIGIT,
+    DIGITS,
+    E,
+    EXP,
+    FRAC,
+    INT,
+    MINUS,
+    PLUS,
+    ZERO,
+    STRING,
+    CHAR,
+    DOUBLE_QUOTE,
+    BACKSLASH,
+    SLASH,
+    B_KW,
+    F_KW,
+    N_KW,
+    R_KW,
+    T_KW,
+    U_KW,
+    HEXDIG,
+    HEXDIG4,
+    ESCAPE,
+    QUOTATION_MARK,
+    UNESCAPED,
+}
+impl From<::rowan::SyntaxKind> for SyntaxKind { fn from(kind: ::rowan::SyntaxKind) -> Self { ::core::assert!(kind.0 <= Self::UNESCAPED as u16); unsafe { ::core::mem::transmute::<u16, SyntaxKind>(kind.0) } } }
+impl From<SyntaxKind> for ::rowan::SyntaxKind { fn from(kind: SyntaxKind) -> Self { ::rowan::SyntaxKind(kind as u16) } }
+decl_ast_node!(JsonText, JSON_TEXT);
+impl JsonText {
+    pub fn value(&self) -> Value {
+        support::child(self.syntax()).unwrap()
+    }
+}
+decl_ast_node!(BeginArray, BEGIN_ARRAY);
+impl BeginArray {
+    pub fn l_brack(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::L_BRACK).unwrap()
+    }
+}
+decl_ast_node!(BeginObject, BEGIN_OBJECT);
+impl BeginObject {
+    pub fn l_curly(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::L_CURLY).unwrap()
+    }
+}
+decl_ast_node!(EndArray, END_ARRAY);
+impl EndArray {
+    pub fn r_brack(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::R_BRACK).unwrap()
+    }
+}
+decl_ast_node!(EndObject, END_OBJECT);
+impl EndObject {
+    pub fn r_curly(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::R_CURLY).unwrap()
+    }
+}
+decl_ast_node!(NameSeparator, NAME_SEPARATOR);
+impl NameSeparator {
+    pub fn colon(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::COLON).unwrap()
+    }
+}
+decl_ast_node!(ValueSeparator, VALUE_SEPARATOR);
+impl ValueSeparator {
+    pub fn comma(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::COMMA).unwrap()
+    }
+}
+decl_ast_node!(Value, VALUE);
+impl Value {
+    pub fn array(&self) -> Option<Array> {
+        support::child(self.syntax())
+    }
+    pub fn false_(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::FALSE)
+    }
+    pub fn null(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::NULL)
+    }
+    pub fn number(&self) -> Option<Number> {
+        support::child(self.syntax())
+    }
+    pub fn object(&self) -> Option<Object> {
+        support::child(self.syntax())
+    }
+    pub fn string(&self) -> Option<String> {
+        support::child(self.syntax())
+    }
+    pub fn true_(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::TRUE)
+    }
+}
+decl_ast_node!(Object, OBJECT);
+impl Object {
+    pub fn begin_object(&self) -> BeginObject {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn end_object(&self) -> EndObject {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn members(&self) -> AstChildren<Member> {
+        support::children(self.syntax())
+    }
+    pub fn value_separators(&self) -> AstChildren<ValueSeparator> {
+        support::children(self.syntax())
+    }
+}
+decl_ast_node!(Member, MEMBER);
+impl Member {
+    pub fn name_separator(&self) -> NameSeparator {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn string(&self) -> String {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn value(&self) -> Value {
+        support::child(self.syntax()).unwrap()
+    }
+}
+decl_ast_node!(Array, ARRAY);
+impl Array {
+    pub fn begin_array(&self) -> BeginArray {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn end_array(&self) -> EndArray {
+        support::child(self.syntax()).unwrap()
+    }
+    pub fn values(&self) -> AstChildren<Value> {
+        support::children(self.syntax())
+    }
+    pub fn value_separators(&self) -> AstChildren<ValueSeparator> {
+        support::children(self.syntax())
+    }
+}
+decl_ast_node!(Number, NUMBER);
+impl Number {
+    pub fn exp(&self) -> Option<Exp> {
+        support::child(self.syntax())
+    }
+    pub fn frac(&self) -> Option<Frac> {
+        support::child(self.syntax())
+    }
+    pub fn int(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::INT).unwrap()
+    }
+    pub fn minus(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::MINUS)
+    }
+}
+decl_ast_node!(Exp, EXP);
+impl Exp {
+    pub fn digits(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::DIGITS).unwrap()
+    }
+    pub fn e(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::E).unwrap()
+    }
+    pub fn minus(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::MINUS)
+    }
+    pub fn plus(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::PLUS)
+    }
+}
+decl_ast_node!(Frac, FRAC);
+impl Frac {
+    pub fn decimal_point(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::DECIMAL_POINT).unwrap()
+    }
+    pub fn digits(&self) -> SyntaxToken {
+        support::token(self.syntax(), SyntaxKind::DIGITS).unwrap()
+    }
+}
+decl_ast_node!(String, STRING);
+impl String {
+    pub fn chars(&self) -> AstChildren<Char> {
+        support::children(self.syntax())
+    }
+}
+decl_ast_node!(Char, CHAR);
+impl Char {
+    pub fn b_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::B_KW)
+    }
+    pub fn backslash(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::BACKSLASH)
+    }
+    pub fn double_quote(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::DOUBLE_QUOTE)
+    }
+    pub fn escape(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::ESCAPE)
+    }
+    pub fn f_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::F_KW)
+    }
+    pub fn hexdig4(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::HEXDIG4)
+    }
+    pub fn n_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::N_KW)
+    }
+    pub fn r_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::R_KW)
+    }
+    pub fn slash(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::SLASH)
+    }
+    pub fn t_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::T_KW)
+    }
+    pub fn u_kw(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::U_KW)
+    }
+    pub fn unescaped(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::UNESCAPED)
+    }
+}
+

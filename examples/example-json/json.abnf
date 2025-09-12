@@ -1,0 +1,63 @@
+; implements rfc8259
+
+exports [ json-text ]
+
+json-text = ws value ws
+
+begin-array     = ws "[" ws
+begin-object    = ws "{" ws
+end-array       = ws "]" ws
+end-object      = ws "}" ws
+name-separator  = ws ":" ws
+value-separator = ws "," ws
+
+ws = $(*< \t\r\n>)
+
+value = false / null / true / object / array / number / string
+false = $"false"
+null  = $"null"
+true  = $"true"
+
+
+object = begin-object [ member *(value-separator member) ]
+         end-object
+
+member = string name-separator value
+
+
+array = begin-array [ value *( value-separator value ) ] end-array
+
+
+number          = [ minus ] int [ frac ] [ exp ]
+decimal-point   = $"."
+digit1-9        = $<1-9>
+DIGIT           = $<0-9>
+DIGITS          = $(1*DIGIT)
+e               = $("e" / "E")
+exp             = e [ minus / plus ] DIGITS
+frac            = decimal-point DIGITS
+
+
+int   = $(zero / digit1-9 *DIGIT)
+minus = $"-"
+plus  = $"+"
+zero  = $"0"
+
+
+string = quotation-mark *char quotation-mark
+char   = unescaped /
+            escape (
+                <"> /          ; "    quotation mark  U+0022
+                "\" /          ; \    reverse solidus U+005C
+                "/" /          ; /    solidus         U+002F
+                "b" /          ; b    backspace       U+0008
+                "f" /          ; f    form feed       U+000C
+                "n" /          ; n    line feed       U+000A
+                "r" /          ; r    carriage return U+000D
+                "t" /          ; t    tab             U+0009
+                "u" HEXDIG4 )  ; uXXXX                U+XXXX
+HEXDIG = $<0-9a-fA-F>
+HEXDIG4 = $(4 HEXDIG)
+escape = $"\"
+quotation-mark = $<">
+unescaped = $<\x20-\x21\x23-\x5B\x5D-\u{10ffff}>
