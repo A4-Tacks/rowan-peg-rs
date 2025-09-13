@@ -7,7 +7,7 @@ Using `rowan` library lossless syntax tree
 Add dependencies:
 
 ```
-char-classes = "0.3.2"
+char-classes = "0.3.4"
 peg = "0.8.5"
 rowan = "0.15.15"
 rowan-peg-utils = "0.1.0"

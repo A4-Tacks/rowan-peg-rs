@@ -10,18 +10,18 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "char-classes"
-version = "0.3.2"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7459aba86f3aaecd7da2696047e56f438c24532846a94d5318f19c79ea4ddc46"
+checksum = "8969f0fb9e53f297c70de4328944314e551c8bb3a60d41d4ea30493c74883e5f"
 dependencies = [
  "char-classes-proc_macro",
 ]
 
 [[package]]
 name = "char-classes-proc_macro"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec87592b21b67091918f2f1612eb45d6a6977a42a988a8d3c36fbcf0e2178188"
+checksum = "7b4cd9d1c1b62db8110f659090a28e21ce97475b5153c91d5b1f5a009e37e57a"
 dependencies = [
  "litrs",
 ]
@@ -74,9 +74,9 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "litrs"
-version = "0.4.1"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ce301924b7887e9d637144fdade93f9dfff9b60981d4ac161db09720d39aa5"
+checksum = "1e4cf394bcd88ba72eb3b2862e21ef6458b0e1586654e213b0176e667bb9d19e"
 
 [[package]]
 name = "memoffset"
@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "rowan"
-version = "0.15.15"
+version = "0.15.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32a58fa8a7ccff2aec4f39cc45bf5f985cec7125ab271cf681c279fd00192b49"
+checksum = "d4f1e4a001f863f41ea8d0e6a0c34b356d5b733db50dadab3efef640bafb779b"
 dependencies = [
  "countme",
  "hashbrown",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "rowan-peg"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "char-classes",
  "getopts-macro",
@@ -199,15 +199,15 @@ checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
 
 [[package]]
 name = "to-true"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afe00c35e9ad48305bb4174b0756ddae7ac3222eb5cdd09e2d3b0d369f18eb08"
+checksum = "5a6b7e835c540dac6a37fc8db384f3e27c515e2536c25a54cbf9fd8ea64fd7a0"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
+checksum = "f63a545481291138910575129486daeaf8ac54aee4387fe7906919f7830c7d9d"
 
 [[package]]
 name = "unicode-width"
