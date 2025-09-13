@@ -1,0 +1,11 @@
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --workspace --no-fail-fast
+      - run: cargo run --package simple-kv
+      - run: cargo run --package example-json -- examples/example-json/example.json
