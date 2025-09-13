@@ -5,6 +5,7 @@ use linked_hash_map::LinkedHashMap as HashMap;
 use rowan::ast::AstNode;
 use to_true::{InTrue, ToTrue};
 use unicode_ident::{is_xid_continue, is_xid_start};
+use rowan_peg_utils::match_options;
 
 use crate::utils::UsedBound;
 
@@ -520,40 +521,40 @@ impl<W: fmt::Write> Processor<W> {
     }
 
     fn process_patatom(&mut self, atom: PatAtom) -> Result<()> {
-        if atom.l_paren().is_some() {
-            self.process_pat_choice(atom.pat_choice().unwrap())?;
-        } else if atom.l_brack().is_some() {
-            let refs_bound = self.take_refs_bound();
-            self.gen_back_wrap(|this| this.process_pat_choice(atom.pat_choice().unwrap()))?;
-            write!(self.out, "?").unwrap();
-            self.refs_bound.iter_mut().for_each(|(_, bound)| bound.0 = 0);
-            self.merge_add(refs_bound);
-        } else if let Some(ident) = atom.ident() {
-            let name = utils::rule_name_of(ident.text());
-            write!(self.out, "{}()", name).unwrap();
-            self.add_bound(name);
-        } else if let Some(string) = atom.string() {
-            self.tok_or_in_slice(&string)?;
-        } else if let Some(matches) = atom.matches()
-            && value::matches(&matches).chars().count() == 1
-        {
-            // special unit string
-            self.tok_or_in_slice(&matches)?;
-        } else if let Some(matches) = atom.matches() {
-            if self.slice == 0 {
-                return Err(Error::MatchesWithoutSlice(matches));
-            }
-            let content = value::matches(&matches);
-            write!(self.out, "(quiet!{{").unwrap();
-            if let Some(pat) = content.strip_prefix('^') {
-                write!(self.out, "[^::char_classes::any!(@\"{pat}\")]").unwrap();
-            } else {
-                write!(self.out, "[::char_classes::any!(@\"{content}\")]").unwrap();
-            }
-            write!(self.out, "}}/expected!({:?}))", matches.text()).unwrap();
-        } else {
-            unreachable!()
-        }
+        match_options! {match atom {
+            l_paren as _ => self.process_pat_choice(atom.pat_choice().unwrap())?,
+            l_brack as _ => {
+                let refs_bound = self.take_refs_bound();
+                self.gen_back_wrap(|this| this.process_pat_choice(atom.pat_choice().unwrap()))?;
+                write!(self.out, "?").unwrap();
+                self.refs_bound.iter_mut().for_each(|(_, bound)| bound.0 = 0);
+                self.merge_add(refs_bound);
+            },
+            ident => {
+                let name = utils::rule_name_of(ident.text());
+                write!(self.out, "{}()", name).unwrap();
+                self.add_bound(name);
+            },
+            string => self.tok_or_in_slice(&string)?,
+            matches if value::matches(&matches).chars().count() == 1 => {
+                // special unit string
+                self.tok_or_in_slice(&matches)?;
+            },
+            matches => {
+                if self.slice == 0 {
+                    return Err(Error::MatchesWithoutSlice(matches));
+                }
+                let content = value::matches(&matches);
+                write!(self.out, "(quiet!{{").unwrap();
+                if let Some(pat) = content.strip_prefix('^') {
+                    write!(self.out, "[^::char_classes::any!(@\"{pat}\")]").unwrap();
+                } else {
+                    write!(self.out, "[::char_classes::any!(@\"{content}\")]").unwrap();
+                }
+                write!(self.out, "}}/expected!({:?}))", matches.text()).unwrap();
+            },
+            _ => unreachable!(),
+        }}
         Ok(())
     }
 
