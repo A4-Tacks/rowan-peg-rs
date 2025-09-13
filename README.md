@@ -1,6 +1,8 @@
-Convert ABNF like grammar to rust-peg build `rowan` lossless syntax tree
+Convert ABNF like grammar to [rust-peg] build `rowan` lossless syntax tree
 
 Using `rowan` library lossless syntax tree
+
+[rust-peg]: https://github.com/kevinmehall/rust-peg
 
 # How To Use
 
@@ -35,6 +37,17 @@ rowan-peg your-lang.abnf > src/grammar.rs
 ```
 
 # Example
+
+## Cargo build
+
+If you want to use cargo to build grammar, you can use rowan-peg-macro
+
+```rust
+#[rowan_peg_macro::build(path = "grammar.abnf")]
+mod grammar {}
+```
+
+---
 
 A simple json parser [example-json](./examples/example-json)
 

@@ -1,7 +1,8 @@
 use rowan::ast::AstNode;
 
 #[allow(dead_code)]
-mod grammar;
+#[rowan_peg_macro::build(path = "../grammar.abnf")]
+mod grammar {}
 
 fn main() {
     let s = "a = 2 b = text";

@@ -13,7 +13,7 @@ repository = "https://github.com/A4-Tacks/rowan-peg-rs"
 readme = "README.md"
 
 [workspace]
-members = ["rowan-peg-utils", "examples/example-json", "examples/simple-kv"]
+members = ["rowan-peg-utils", "examples/example-json", "examples/simple-kv", "rowan-peg-macro"]
 
 [features]
 trace = ["peg/trace"]
@@ -21,6 +21,7 @@ trace = ["peg/trace"]
 [dependencies]
 char-classes = "0.3.4"
 getopts-macro = "0.1.8"
+line-column = "0.2.0"
 linked-hash-map = "0.5.6"
 peg = "0.8.5"
 rowan = "0.15.15"

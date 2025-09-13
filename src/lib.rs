@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{collections::HashSet, mem::take};
+use std::{collections::HashSet, fmt::Display, mem::take};
 use linked_hash_map::LinkedHashMap as HashMap;
 
 use rowan::ast::AstNode;
@@ -66,6 +66,25 @@ pub enum Error {
     UnknownLiteral(SyntaxToken),
     MatchesWithoutSlice(SyntaxToken),
     DisallowedSlice(SyntaxNode),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::EmptyLiteral(t) => {
+                write!(f, "empty literal {:?}", t.text())
+            },
+            Error::UnknownLiteral(t) => {
+                write!(f, "unknown literal {:?}", t.text())
+            },
+            Error::MatchesWithoutSlice(t) => {
+                write!(f, "matches without slice {:?}", t.text())
+            },
+            Error::DisallowedSlice(t) => {
+                write!(f, "disallowed slice {:?}", t.text())
+            },
+        }
+    }
 }
 
 type Result<T, E = Error> = core::result::Result<T, E>;
@@ -553,6 +572,35 @@ impl<W: fmt::Write> Processor<W> {
         }
         Ok(())
     }
+}
+
+pub fn quick_process(src: &str) -> Result<String, String> {
+    let state = &mut rowan_peg_utils::ParseState::default();
+    match parser::decl_list(src, state) {
+        Ok(()) => (),
+        Err(e) => {
+            return Err(format!("parse grammar {e}"));
+        },
+    }
+    let syntax_node = SyntaxNode::new_root(state.finish());
+    let decl_list = DeclList::cast(syntax_node).unwrap();
+    let mut buf = String::new();
+    let mut proc = Processor::from(&mut buf);
+    match proc.start_process(&decl_list) {
+        Ok(()) => {},
+        Err(e) => {
+            let range = match &e {
+                Error::EmptyLiteral(tok)
+                | Error::UnknownLiteral(tok)
+                | Error::MatchesWithoutSlice(tok) => tok.text_range(),
+                Error::DisallowedSlice(node) => node.text_range(),
+            };
+            let index = range.start().into();
+            let (line, col) = line_column::line_column(src, index);
+            return Err(format!("processing error at {line}:{col} {e}"));
+        },
+    }
+    Ok(buf)
 }
 
 #[cfg(test)]
