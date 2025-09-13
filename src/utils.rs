@@ -176,6 +176,7 @@ const RUST_KEYWORDS: &[&str] = &[
     "dyn",
     "gen",
     "try",
+    "rule",
 ];
 const PUNCT_NAMES: &[(&str, &str)] = &[
     ("$", "dollar"),
