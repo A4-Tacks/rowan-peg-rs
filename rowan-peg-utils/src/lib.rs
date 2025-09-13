@@ -125,3 +125,103 @@ impl<'a> ParseState<'a> {
         take(&mut self.builder).finish()
     }
 }
+
+/// Expand into a let-chain matching option chain
+///
+/// # Roughly de-sugar
+///
+/// - `foo.bar.baz` -> `let Some(baz) = value.foo().bar().baz()`
+/// - `foo.bar.baz as x` -> `let Some(x) = value.foo().bar().baz()`
+/// - `foo.bar { a, b.c }` -> `let Some(bar) = value.foo().bar()
+///   && let Some(a) = bar.a() && let Some(c) = bar.b().c()`
+///
+/// # Examples
+///
+/// ```ignore
+/// match_options! {match atom {
+///     l_paren as _ => {},
+///     l_brack as _ => {
+///         // ...
+///     },
+///     ident => ident.text(),
+///     string => {},
+///     matches if matches.text() == "<>" => {},
+///     matches => {},
+///     _ => unreachable!(),
+/// }}
+/// ```
+#[macro_export]
+macro_rules! match_options {
+    (@arms($expr:tt)
+        $($level1:ident).+ $(as $name1:tt)?
+        $({$(
+            $($level2:ident).+ $(as $name2:tt)?
+            $({$(
+                $($level3:ident).+ $(as $name3:tt)?
+                $({$(
+                    $($level4:ident).+ $(as $name4:tt)?
+                ),+ $(,)?})?
+            ),+ $(,)?})?
+        ),+ $(,)?})?
+        $(if $guard:expr)?
+        => $code:expr
+        $(, $($t:tt)*)?
+    ) => {
+        if let ::core::option::Option::Some(__level1) = $expr $(.$level1())+
+            $($(
+                && let ::core::option::Option::Some(__level2) = __level1 $(.$level2())+
+                $($(
+                    && let ::core::option::Option::Some(__level3) = __level2 $(.$level3())+
+                    $($(
+                        && let ::core::option::Option::Some($crate::match_options! { @last$(($name4))? $($level4)+ }) = __level3 $(.$level4())+
+                    )+)?
+                    && let $crate::match_options! { @last$(($name3))? $($level3)+ } = __level3
+                )+)?
+                && let $crate::match_options! { @last$(($name2))? $($level2)+ } = __level2
+            )+)?
+            && let $crate::match_options! { @last$(($name1))? $($level1)+ } = __level1
+            $(&& $guard)?
+        {
+            $code
+        } $(else {
+            $crate::match_options! {
+                @arms($expr) $($t)*
+            }
+        })?
+    };
+    (@last $i1:ident) => { $i1 };
+    (@last $i1:ident $i2:ident) => { $i2 };
+    (@last $i1:ident $i2:ident $i3:ident) => { $i3 };
+    (@last $i1:ident $i2:ident $i3:ident $i4:ident) => { $i4 };
+    (@last($renamed:pat) $($_:tt)*) => { $renamed };
+    (@arms($expr:tt)) => {};
+    (@arms($expr:tt) _ => $e:expr $(,)?) => {$e};
+
+    (match $expr:tt {$($t:tt)+}) => {{
+        #[allow(irrefutable_let_patterns)]
+        {
+            $crate::match_options! {
+                @arms($expr) $($t)*
+            }
+        }
+    }};
+
+    // partial completion branch
+    ($i:ident $expr:tt) => { $i $expr };
+    (match $expr:tt {}) => { match $expr };
+}
+
+#[test]
+#[allow(unused)]
+fn feature() {
+    struct Foo;
+    struct Bar;
+    struct Baz;
+    impl Foo { fn bar(&self) -> Bar { Bar } }
+    impl Bar { fn baz(&self) -> Option<Baz> { Some(Baz) } }
+    impl Baz { fn foo(&self) -> Option<Foo> { Some(Foo) } }
+    impl Baz { fn bar(&self) -> Option<Bar> { Some(Bar) } }
+    match_options!{match Foo {
+        bar.baz as m { foo as _, bar as _ } => {}
+    }};
+}
