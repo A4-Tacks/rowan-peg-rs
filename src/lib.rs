@@ -544,11 +544,13 @@ impl<W: fmt::Write> Processor<W> {
                 return Err(Error::MatchesWithoutSlice(matches));
             }
             let content = value::matches(&matches);
+            write!(self.out, "(quiet!{{").unwrap();
             if let Some(pat) = content.strip_prefix('^') {
                 write!(self.out, "[^::char_classes::any!(@\"{pat}\")]").unwrap();
             } else {
                 write!(self.out, "[::char_classes::any!(@\"{content}\")]").unwrap();
             }
+            write!(self.out, "}}/expected!({:?}))", matches.text()).unwrap();
         } else {
             unreachable!()
         }
