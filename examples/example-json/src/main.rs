@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, env::args, fs, process::exit};
 
 use grammar as ast;
 use rowan::ast::AstNode;
+use rowan_peg_utils::match_options;
 
 #[derive(Debug)]
 pub enum JsonValue {
@@ -30,32 +31,35 @@ fn main() {
 }
 
 fn gen_json(json: ast::Value) -> JsonValue {
-    json.false_().map(|_| JsonValue::Bool(false))
-        .or_else(|| json.null().map(|_| JsonValue::Null))
-        .or_else(|| json.true_().map(|_| JsonValue::Bool(true)))
-        .or_else(|| json.object().map(|obj| JsonValue::Object(obj.members().map(|memb| (parse_string(memb.string()), gen_json(memb.value()))).collect())))
-        .or_else(|| json.array().map(|arr| JsonValue::Array(arr.values().map(gen_json).collect())))
-        .or_else(|| json.number().map(|n| JsonValue::Number(n.syntax().text().to_string().parse().unwrap())))
-        .or_else(|| json.string().map(parse_string).map(JsonValue::String))
-        .unwrap()
+    match_options! {match json {
+        false_ as _ => JsonValue::Bool(false),
+        null as _ => JsonValue::Null,
+        true_ as _ => JsonValue::Bool(true),
+        object => {
+            JsonValue::Object(object.members()
+                .map(|it| (parse_string(it.string()), gen_json(it.value())))
+                .collect())
+        },
+        array => JsonValue::Array(array.values().map(gen_json).collect()),
+        number => JsonValue::Number(number.syntax().text().to_string().parse().unwrap()),
+        string => JsonValue::String(parse_string(string)),
+        _ => unreachable!(),
+    }}
 }
 
 fn parse_string(s: ast::String) -> String {
-    s.chars()
-        .map(|ch| ch.unescaped()
-            .map(|ch| ch.text().chars().next().unwrap())
-            .or_else(|| ch.double_quote().map(|_| '"'))
-            .or_else(|| ch.backslash().map(|_| '\\'))
-            .or_else(|| ch.slash().map(|_| '/'))
-            .or_else(|| ch.b_kw().map(|_| '\x08'))
-            .or_else(|| ch.f_kw().map(|_| '\x0c'))
-            .or_else(|| ch.n_kw().map(|_| '\x0a'))
-            .or_else(|| ch.r_kw().map(|_| '\x0d'))
-            .or_else(|| ch.t_kw().map(|_| '\x09'))
-            .or_else(|| ch.u_kw().map(|_| {
-                let n = u32::from_str_radix(ch.hexdig4().unwrap().text(), 16).unwrap();
-                char::from_u32(n).unwrap()
-            }))
-            .unwrap())
-        .collect()
+    #[allow(unused_variables)]
+    s.chars().map(|it| match_options! {match it {
+        unescaped => unescaped.text().chars().next().unwrap(),
+        double_quote => '"',
+        backslash => '\\',
+        slash => '/',
+        b_kw => '\x08',
+        f_kw => '\x0c',
+        n_kw => '\x0a',
+        r_kw => '\x0d',
+        t_kw => '\x09',
+        hexdig4 => char::from_u32(u32::from_str_radix(hexdig4.text(), 16).unwrap()).unwrap(),
+        _ => unreachable!(),
+    }}).collect()
 }
