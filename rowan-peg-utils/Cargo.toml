@@ -1,6 +1,6 @@
 [package]
 name = "rowan-peg-utils"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2024"
 
 authors = ["A4-Tacks <wdsjxhno1001@163.com>"]

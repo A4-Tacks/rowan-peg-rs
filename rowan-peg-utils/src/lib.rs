@@ -126,6 +126,21 @@ impl<'a> ParseState<'a> {
     }
 }
 
+pub mod support {
+    use rowan::{Language, NodeOrToken, SyntaxNode, SyntaxToken};
+
+    pub fn tokens<L>(node: &SyntaxNode<L>, kind: L::Kind) -> impl Iterator<
+        Item = SyntaxToken<L>
+    >
+    where L: Language
+    {
+       node.children_with_tokens()
+           .filter_map(NodeOrToken::into_token)
+           .filter(move |token| token.kind() == kind)
+    }
+}
+pub use support::tokens;
+
 /// Expand into a let-chain matching option chain
 ///
 /// # Roughly de-sugar
