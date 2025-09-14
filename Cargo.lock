@@ -33,19 +33,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
 
 [[package]]
-name = "either"
-version = "1.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
-
-[[package]]
 name = "example-json"
 version = "0.1.0"
 dependencies = [
  "char-classes",
  "peg",
  "rowan",
- "rowan-peg-utils 0.2.2",
+ "rowan-peg-utils 0.2.1",
 ]
 
 [[package]]
@@ -173,7 +167,7 @@ dependencies = [
  "linked-hash-map",
  "peg",
  "rowan",
- "rowan-peg-utils 0.2.1",
+ "rowan-peg-utils 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "to-true",
  "unicode-ident",
 ]
@@ -190,17 +184,16 @@ dependencies = [
 [[package]]
 name = "rowan-peg-utils"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fe4a8e0d68a67611ab681f88739985c62d84fb7b93d57146017f070ca8265a6"
 dependencies = [
  "rowan",
 ]
 
 [[package]]
 name = "rowan-peg-utils"
-version = "0.2.2"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe4a8e0d68a67611ab681f88739985c62d84fb7b93d57146017f070ca8265a6"
 dependencies = [
- "either",
  "rowan",
 ]
 
@@ -218,7 +211,7 @@ dependencies = [
  "peg",
  "rowan",
  "rowan-peg-macro",
- "rowan-peg-utils 0.2.2",
+ "rowan-peg-utils 0.2.1",
 ]
 
 [[package]]
