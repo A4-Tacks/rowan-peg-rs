@@ -1,6 +1,6 @@
 [package]
 name = "rowan-peg-utils"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 
 authors = ["A4-Tacks <wdsjxhno1001@163.com>"]
@@ -10,4 +10,5 @@ license = "MIT"
 repository = "https://github.com/A4-Tacks/rowan-peg-rs"
 
 [dependencies]
+either = "1.15.0"
 rowan = "0.15.15"
