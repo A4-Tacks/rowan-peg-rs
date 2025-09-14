@@ -236,4 +236,8 @@ const PUNCT_NAMES: &[(&str, &str)] = &[
     (">>=", "shreq"),
     ("'", "single_quote"),
     ("\"", "double_quote"),
+    (" ", "space"),
+    ("\t", "tab"),
+    ("\n", "lf"),
+    ("\r", "cr"),
 ];
