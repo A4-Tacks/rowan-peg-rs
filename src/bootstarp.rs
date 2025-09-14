@@ -117,6 +117,12 @@ impl From<::rowan::SyntaxKind> for SyntaxKind { fn from(kind: ::rowan::SyntaxKin
 impl From<SyntaxKind> for ::rowan::SyntaxKind { fn from(kind: SyntaxKind) -> Self { ::rowan::SyntaxKind(kind as u16) } }
 decl_ast_node!(Trivia, TRIVIA);
 impl Trivia {
+    pub fn comment_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::COMMENT)
+    }
+    pub fn whitespace_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WHITESPACE)
+    }
 }
 decl_ast_node!(Label, LABEL);
 impl Label {
@@ -227,6 +233,9 @@ impl PatChoice {
     }
     pub fn pat_lists(&self) -> AstChildren<PatList> {
         support::children(self.syntax())
+    }
+    pub fn slash_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::SLASH)
     }
     pub fn trivias(&self) -> AstChildren<Trivia> {
         support::children(self.syntax())

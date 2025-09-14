@@ -12,7 +12,7 @@ Add dependencies:
 char-classes = "0.3.4"
 peg = "0.8.5"
 rowan = "0.15.15"
-rowan-peg-utils = "0.1.0"
+rowan-peg-utils = "0.2.3"
 ```
 
 Edit your grammar declaration:

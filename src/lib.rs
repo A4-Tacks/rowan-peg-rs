@@ -329,17 +329,18 @@ impl<W: fmt::Write> Processor<W> {
                 } else {
                     utils::node_name_of(&child_name)
                 };
-                match method {
-                    Method::Optional => base_ty = format!("Option<{base_ty}>"),
-                    Method::Strict => (),
-                    Method::Many => base_ty = format!("AstChildren<{base_ty}>"),
-                }
+                base_ty = match method {
+                    Method::Optional => format!("Option<{base_ty}>"),
+                    Method::Strict => base_ty,
+                    Method::Many if is_token => "impl Iterator<Item = SyntaxToken>".into(),
+                    Method::Many => format!("AstChildren<{base_ty}>"),
+                };
                 let body = if is_token {
                     let kind = utils::kind_name_of(&child_name);
                     match method {
                         Method::Optional => format!("support::token(self.syntax(), SyntaxKind::{kind})"),
                         Method::Strict => format!("support::token(self.syntax(), SyntaxKind::{kind}).unwrap()"),
-                        Method::Many => continue,
+                        Method::Many => format!("::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::{kind})"),
                     }
                 } else {
                     match method {
@@ -349,7 +350,9 @@ impl<W: fmt::Write> Processor<W> {
                     }.into()
                 };
                 let method_name = if method == Method::Many {
-                    if child_name.ends_with('s') {
+                    if is_token {
+                        format!("{child_name}_tokens")
+                    } else if child_name.ends_with('s') {
                         format!("{child_name}es")
                     } else {
                         format!("{child_name}s")
