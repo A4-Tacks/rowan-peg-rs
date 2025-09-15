@@ -226,6 +226,50 @@ macro_rules! match_options {
     (match $expr:tt {}) => { match $expr };
 }
 
+
+/// Match AST AstNode::cast()
+///
+/// # Examples
+///
+/// ```ignore
+/// match_ast!{match node {
+///     grammar::Rule(rule) => rule.name(),
+///     grammar::Slice(slice) => slice.name(),
+///     _ => unnamed(),
+/// }}
+/// ```
+#[macro_export]
+macro_rules! match_ast {
+    (@arms($node:tt)
+        $( $path:ident )::+ ($it:pat)
+        $(if $guard:expr)?
+        => $res:expr
+        $(, $($t:tt)*)?
+    ) => {
+        if let ::core::option::Option::Some($it) = $($path::)+cast($node.clone())
+            $(&& $guard)?
+        {
+            $res
+        } else {
+            $crate::match_ast! {
+                @arms($node) $($($t)*)?
+            }
+        }
+    };
+
+    (@arms($node:expr) _ => $catch_all:expr $(,)?) => { $catch_all };
+
+    (match $node:tt {$($t:tt)+}) => {{
+        $crate::match_ast! {
+            @arms($node) $($t)*
+        }
+    }};
+
+    // partial completion branch
+    ($i:ident $expr:tt) => { $i $expr };
+    (match $expr:tt {}) => { match $expr };
+}
+
 #[test]
 #[allow(unused)]
 fn feature() {
@@ -239,4 +283,14 @@ fn feature() {
     match_options!{match Foo {
         bar.baz as m { foo as _, bar as _ } => {}
     }};
+}
+
+#[cfg(test)]
+fn _foo<L: rowan::Language, Ty: rowan::ast::AstNode<Language = L>>(node: &rowan::SyntaxNode<L>) {
+    let x = true;
+    match_ast! {match node {
+        Ty(ty) if x => { ty.syntax().kind(); },
+        Ty(ty) => _ = ty.syntax().kind(),
+        _ => panic!()
+    }}
 }
