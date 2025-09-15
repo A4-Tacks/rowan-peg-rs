@@ -1,5 +1,6 @@
 use core::fmt;
 use std::{collections::HashSet, fmt::Display, mem::take};
+use char_classes::any;
 use linked_hash_map::LinkedHashMap as HashMap;
 
 use rowan::ast::AstNode;
@@ -358,8 +359,21 @@ impl<W: fmt::Write> Processor<W> {
                         format!("{child_name}s")
                     }
                 } else {
-                    child_name
+                    child_name.clone()
                 };
+                if let Some(punct) = utils::punct_of(&child_name)
+                    && punct.trim() == punct
+                {
+                    let hint = child_name.replace('_', " ");
+                    if punct.contains('`') {
+                        writeln!(self.out, r#"    /// Get {hint} `` {punct} ``"#).unwrap();
+                    } else {
+                        writeln!(self.out, r#"    /// Get {hint} `{punct}`"#).unwrap();
+                    }
+                    if !punct.chars().any(any!("'\" \t\r\n_\\")) {
+                        writeln!(self.out, r#"    #[doc(alias = {punct:?})]"#).unwrap();
+                    }
+                }
                 writeln!(self.out, "    pub fn {method_name}(&self) -> {base_ty} {{").unwrap();
                 writeln!(self.out, "        {body}").unwrap();
                 writeln!(self.out, "    }}").unwrap();

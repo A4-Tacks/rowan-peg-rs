@@ -25,6 +25,13 @@ pub fn punct_name_of(punct: &str) -> Option<String> {
         .into()
 }
 
+pub fn punct_of(name: &str) -> Option<String> {
+    PUNCT_NAMES.iter()
+        .find(|(_, it)| name == *it)?
+        .0.to_owned()
+        .into()
+}
+
 pub fn to_upper_camel(s: &str, mut upper: bool) -> String {
     let mut buf = String::with_capacity(s.len() + s.len() / 4);
     let mut start = true;
@@ -236,6 +243,7 @@ const PUNCT_NAMES: &[(&str, &str)] = &[
     (">>=", "shreq"),
     ("'", "single_quote"),
     ("\"", "double_quote"),
+    ("`", "back_quote"),
     (" ", "space"),
     ("\t", "tab"),
     ("\n", "lf"),

@@ -138,6 +138,8 @@ impl RepeatRest {
     pub fn number(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::NUMBER)
     }
+    /// Get star `*`
+    #[doc(alias = "*")]
     pub fn star(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::STAR).unwrap()
     }
@@ -147,6 +149,8 @@ impl Repeat {
     pub fn number(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::NUMBER)
     }
+    /// Get plus `+`
+    #[doc(alias = "+")]
     pub fn plus(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::PLUS)
     }
@@ -156,6 +160,8 @@ impl Repeat {
 }
 decl_ast_node!(PatExpect, PAT_EXPECT);
 impl PatExpect {
+    /// Get at `@`
+    #[doc(alias = "@")]
     pub fn at(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::AT).unwrap()
     }
@@ -168,9 +174,13 @@ impl PatAtom {
     pub fn ident(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::IDENT)
     }
+    /// Get l brack `[`
+    #[doc(alias = "[")]
     pub fn l_brack(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::L_BRACK)
     }
+    /// Get l paren `(`
+    #[doc(alias = "(")]
     pub fn l_paren(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::L_PAREN)
     }
@@ -180,9 +190,13 @@ impl PatAtom {
     pub fn pat_choice(&self) -> Option<PatChoice> {
         support::child(self.syntax())
     }
+    /// Get r brack `]`
+    #[doc(alias = "]")]
     pub fn r_brack(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::R_BRACK)
     }
+    /// Get r paren `)`
+    #[doc(alias = ")")]
     pub fn r_paren(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::R_PAREN)
     }
@@ -195,12 +209,18 @@ impl PatAtom {
 }
 decl_ast_node!(PatOp, PAT_OP);
 impl PatOp {
+    /// Get amp `&`
+    #[doc(alias = "&")]
     pub fn amp(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::AMP)
     }
+    /// Get bang `!`
+    #[doc(alias = "!")]
     pub fn bang(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::BANG)
     }
+    /// Get dollar `$`
+    #[doc(alias = "$")]
     pub fn dollar(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::DOLLAR)
     }
@@ -210,6 +230,8 @@ impl PatOp {
     pub fn repeat(&self) -> Option<Repeat> {
         support::child(self.syntax())
     }
+    /// Get tilde `~`
+    #[doc(alias = "~")]
     pub fn tilde(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::TILDE)
     }
@@ -234,6 +256,8 @@ impl PatChoice {
     pub fn pat_lists(&self) -> AstChildren<PatList> {
         support::children(self.syntax())
     }
+    /// Get slash `/`
+    #[doc(alias = "/")]
     pub fn slash_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::SLASH)
     }
@@ -243,6 +267,8 @@ impl PatChoice {
 }
 decl_ast_node!(Named, NAMED);
 impl Named {
+    /// Get eq `=`
+    #[doc(alias = "=")]
     pub fn eq(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::EQ).unwrap()
     }
@@ -279,9 +305,13 @@ impl ExportList {
     pub fn exports_kw(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::EXPORTS_KW).unwrap()
     }
+    /// Get l brack `[`
+    #[doc(alias = "[")]
     pub fn l_brack(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::L_BRACK).unwrap()
     }
+    /// Get r brack `]`
+    #[doc(alias = "]")]
     pub fn r_brack(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::R_BRACK).unwrap()
     }

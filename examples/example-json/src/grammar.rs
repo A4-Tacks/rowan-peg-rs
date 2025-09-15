@@ -59,7 +59,7 @@ pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
     rule end_object() = (g:({state.guard(END_OBJECT)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(R_CURLY)}) s:$(("}")) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
     rule name_separator() = (g:({state.guard(NAME_SEPARATOR)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(COLON)}) s:$((":")) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
     rule value_separator() = (g:({state.guard(VALUE_SEPARATOR)}) ((()(g:({state.guard_none()})(ws() (g:({state.quiet().guard_token(COMMA)}) s:$((",")) {g.accept_token(s)}) ws()){g.accept_none()}))) {g.accept()})
-    rule ws() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(WS)}) s:$(((()(g:({state.guard_none()})((g:({state.guard_none()})([::char_classes::any!(@" \t\r\n")]){g.accept_none()})*){g.accept_none()})))) {g.accept_token(s)})){g.accept_none()}))
+    rule ws() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(WS)}) s:$(((()(g:({state.guard_none()})((g:({state.guard_none()})((quiet!{[::char_classes::any!(@" \t\r\n")]}/expected!("< \\t\\r\\n>"))){g.accept_none()})*){g.accept_none()})))) {g.accept_token(s)})){g.accept_none()}))
     rule value() = (g:({state.guard(VALUE)}) ((()(g:({state.guard_none()})(false_()){g.accept_none()}) / ()(g:({state.guard_none()})(null()){g.accept_none()}) / ()(g:({state.guard_none()})(true_()){g.accept_none()}) / ()(g:({state.guard_none()})(object()){g.accept_none()}) / ()(g:({state.guard_none()})(array()){g.accept_none()}) / ()(g:({state.guard_none()})(number()){g.accept_none()}) / ()(g:({state.guard_none()})(string()){g.accept_none()}))) {g.accept()})
     rule false_() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(FALSE)}) s:$(("false")) {g.accept_token(s)})){g.accept_none()}))
     rule null() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(NULL)}) s:$(("null")) {g.accept_token(s)})){g.accept_none()}))
@@ -69,8 +69,8 @@ pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
     rule array() = (g:({state.guard(ARRAY)}) ((()(g:({state.guard_none()})(begin_array() (g:({state.guard_none()})((()(g:({state.guard_none()})(value() (g:({state.guard_none()})((()(g:({state.guard_none()})(value_separator() value()){g.accept_none()}))){g.accept_none()})*){g.accept_none()}))){g.accept_none()})? end_array()){g.accept_none()}))) {g.accept()})
     rule number() = (g:({state.guard(NUMBER)}) ((()(g:({state.guard_none()})((g:({state.guard_none()})((()(g:({state.guard_none()})(minus()){g.accept_none()}))){g.accept_none()})? int() (g:({state.guard_none()})((()(g:({state.guard_none()})(frac()){g.accept_none()}))){g.accept_none()})? (g:({state.guard_none()})((()(g:({state.guard_none()})(exp()){g.accept_none()}))){g.accept_none()})?){g.accept_none()}))) {g.accept()})
     rule decimal_point() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DECIMAL_POINT)}) s:$((".")) {g.accept_token(s)})){g.accept_none()}))
-    rule digit1_9() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT1_9)}) s:$(([::char_classes::any!(@"1-9")])) {g.accept_token(s)})){g.accept_none()}))
-    rule digit() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT)}) s:$(([::char_classes::any!(@"0-9")])) {g.accept_token(s)})){g.accept_none()}) / expected!("digit"))
+    rule digit1_9() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT1_9)}) s:$(((quiet!{[::char_classes::any!(@"1-9")]}/expected!("<1-9>")))) {g.accept_token(s)})){g.accept_none()}))
+    rule digit() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGIT)}) s:$(((quiet!{[::char_classes::any!(@"0-9")]}/expected!("<0-9>")))) {g.accept_token(s)})){g.accept_none()}) / expected!("digit"))
     rule digits() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(DIGITS)}) s:$(((()(g:({state.guard_none()})((g:({state.guard_none()})(digit()){g.accept_none()})+){g.accept_none()})))) {g.accept_token(s)})){g.accept_none()}))
     rule e() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(E)}) s:$(((()(g:({state.guard_none()})("e"){g.accept_none()}) / ()(g:({state.guard_none()})("E"){g.accept_none()})))) {g.accept_token(s)})){g.accept_none()}))
     rule exp() = (g:({state.guard(EXP)}) ((()(g:({state.guard_none()})(e() (g:({state.guard_none()})((()(g:({state.guard_none()})(minus()){g.accept_none()}) / ()(g:({state.guard_none()})(plus()){g.accept_none()}))){g.accept_none()})? digits()){g.accept_none()}))) {g.accept()})
@@ -81,11 +81,11 @@ pub type SyntaxToken = ::rowan::SyntaxToken<Lang>;
     rule zero() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(ZERO)}) s:$(("0")) {g.accept_token(s)})){g.accept_none()}))
     rule string() = (g:({state.guard(STRING)}) ((()(g:({state.guard_none()})(quotation_mark() (g:({state.guard_none()})(char()){g.accept_none()})* quotation_mark()){g.accept_none()}))) {g.accept()})
     rule char() = (g:({state.guard(CHAR)}) ((()(g:({state.guard_none()})(unescaped()){g.accept_none()}) / ()(g:({state.guard_none()})(escape() (()(g:({state.guard_none()})((g:({state.quiet().guard_token(DOUBLE_QUOTE)}) s:$(("\"")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(BACKSLASH)}) s:$(("\\")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(SLASH)}) s:$(("/")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(B_KW)}) s:$(("b")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(F_KW)}) s:$(("f")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(N_KW)}) s:$(("n")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(R_KW)}) s:$(("r")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(T_KW)}) s:$(("t")) {g.accept_token(s)})){g.accept_none()}) / ()(g:({state.guard_none()})((g:({state.quiet().guard_token(U_KW)}) s:$(("u")) {g.accept_token(s)}) hexdig4()){g.accept_none()}))){g.accept_none()}) / expected!("char"))) {g.accept()})
-    rule hexdig() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(HEXDIG)}) s:$(([::char_classes::any!(@"0-9a-fA-F")])) {g.accept_token(s)})){g.accept_none()}))
+    rule hexdig() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(HEXDIG)}) s:$(((quiet!{[::char_classes::any!(@"0-9a-fA-F")]}/expected!("<0-9a-fA-F>")))) {g.accept_token(s)})){g.accept_none()}))
     rule hexdig4() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(HEXDIG4)}) s:$(((()(g:({state.guard_none()})((g:({state.guard_none()})(hexdig()){g.accept_none()})*<4,4>){g.accept_none()})))) {g.accept_token(s)})){g.accept_none()}))
     rule escape() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(ESCAPE)}) s:$(("\\")) {g.accept_token(s)})){g.accept_none()}))
     rule quotation_mark() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(QUOTATION_MARK)}) s:$(("\"")) {g.accept_token(s)})){g.accept_none()}))
-    rule unescaped() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(UNESCAPED)}) s:$(([::char_classes::any!(@"\x20-\x21\x23-\x5B\x5D-\u{10ffff}")])) {g.accept_token(s)})){g.accept_none()}))
+    rule unescaped() = ()(()(g:({state.guard_none()})((g:({state.quiet().guard_token(UNESCAPED)}) s:$(((quiet!{[::char_classes::any!(@"\x20-\x21\x23-\x5B\x5D-\u{10ffff}")]}/expected!("<\\x20-\\x21\\x23-\\x5B\\x5D-\\u{10ffff}>")))) {g.accept_token(s)})){g.accept_none()}))
 });
 #[repr(u16)]
 #[allow(non_camel_case_types)]
@@ -148,41 +148,74 @@ impl JsonText {
     pub fn value(&self) -> Value {
         support::child(self.syntax()).unwrap()
     }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
+    }
 }
 decl_ast_node!(BeginArray, BEGIN_ARRAY);
 impl BeginArray {
+    /// Get l brack `[`
+    #[doc(alias = "[")]
     pub fn l_brack(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::L_BRACK).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(BeginObject, BEGIN_OBJECT);
 impl BeginObject {
+    /// Get l curly `{`
+    #[doc(alias = "{")]
     pub fn l_curly(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::L_CURLY).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(EndArray, END_ARRAY);
 impl EndArray {
+    /// Get r brack `]`
+    #[doc(alias = "]")]
     pub fn r_brack(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::R_BRACK).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(EndObject, END_OBJECT);
 impl EndObject {
+    /// Get r curly `}`
+    #[doc(alias = "}")]
     pub fn r_curly(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::R_CURLY).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(NameSeparator, NAME_SEPARATOR);
 impl NameSeparator {
+    /// Get colon `:`
+    #[doc(alias = ":")]
     pub fn colon(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::COLON).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(ValueSeparator, VALUE_SEPARATOR);
 impl ValueSeparator {
+    /// Get comma `,`
+    #[doc(alias = ",")]
     pub fn comma(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::COMMA).unwrap()
+    }
+    pub fn ws_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
 decl_ast_node!(Value, VALUE);
@@ -262,6 +295,8 @@ impl Number {
     pub fn int(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::INT).unwrap()
     }
+    /// Get minus `-`
+    #[doc(alias = "-")]
     pub fn minus(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::MINUS)
     }
@@ -274,9 +309,13 @@ impl Exp {
     pub fn e(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::E).unwrap()
     }
+    /// Get minus `-`
+    #[doc(alias = "-")]
     pub fn minus(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::MINUS)
     }
+    /// Get plus `+`
+    #[doc(alias = "+")]
     pub fn plus(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::PLUS)
     }
@@ -295,15 +334,20 @@ impl String {
     pub fn chars(&self) -> AstChildren<Char> {
         support::children(self.syntax())
     }
+    pub fn quotation_mark_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
+        ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::QUOTATION_MARK)
+    }
 }
 decl_ast_node!(Char, CHAR);
 impl Char {
     pub fn b_kw(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::B_KW)
     }
+    /// Get backslash `\`
     pub fn backslash(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::BACKSLASH)
     }
+    /// Get double quote `"`
     pub fn double_quote(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::DOUBLE_QUOTE)
     }
@@ -322,6 +366,8 @@ impl Char {
     pub fn r_kw(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::R_KW)
     }
+    /// Get slash `/`
+    #[doc(alias = "/")]
     pub fn slash(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::SLASH)
     }
