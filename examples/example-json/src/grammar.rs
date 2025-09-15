@@ -2,7 +2,8 @@
 use rowan::{ast::{support, AstChildren, AstNode}, Language};
 
 macro_rules! decl_ast_node {
-    ($node:ident, $kind:ident) => {
+    ($node:ident, $kind:ident $(, #[$meta:meta])?) => {
+        $(#[$meta])?
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct $node(SyntaxNode);
         impl AstNode for $node {
@@ -143,7 +144,7 @@ pub enum SyntaxKind {
 }
 impl From<::rowan::SyntaxKind> for SyntaxKind { fn from(kind: ::rowan::SyntaxKind) -> Self { ::core::assert!(kind.0 <= Self::UNESCAPED as u16); unsafe { ::core::mem::transmute::<u16, SyntaxKind>(kind.0) } } }
 impl From<SyntaxKind> for ::rowan::SyntaxKind { fn from(kind: SyntaxKind) -> Self { ::rowan::SyntaxKind(kind as u16) } }
-decl_ast_node!(JsonText, JSON_TEXT);
+decl_ast_node!(JsonText, JSON_TEXT, #[doc = "```abnf\njson-text = ws value ws\n```"]);
 impl JsonText {
     pub fn value(&self) -> Value {
         support::child(self.syntax()).unwrap()
@@ -152,7 +153,7 @@ impl JsonText {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(BeginArray, BEGIN_ARRAY);
+decl_ast_node!(BeginArray, BEGIN_ARRAY, #[doc = "```abnf\nbegin-array     = ws \"[\" ws\n```"]);
 impl BeginArray {
     /// Get l brack `[`
     #[doc(alias = "[")]
@@ -163,7 +164,7 @@ impl BeginArray {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(BeginObject, BEGIN_OBJECT);
+decl_ast_node!(BeginObject, BEGIN_OBJECT, #[doc = "```abnf\nbegin-object    = ws \"{\" ws\n```"]);
 impl BeginObject {
     /// Get l curly `{`
     #[doc(alias = "{")]
@@ -174,7 +175,7 @@ impl BeginObject {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(EndArray, END_ARRAY);
+decl_ast_node!(EndArray, END_ARRAY, #[doc = "```abnf\nend-array       = ws \"]\" ws\n```"]);
 impl EndArray {
     /// Get r brack `]`
     #[doc(alias = "]")]
@@ -185,7 +186,7 @@ impl EndArray {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(EndObject, END_OBJECT);
+decl_ast_node!(EndObject, END_OBJECT, #[doc = "```abnf\nend-object      = ws \"}\" ws\n```"]);
 impl EndObject {
     /// Get r curly `}`
     #[doc(alias = "}")]
@@ -196,7 +197,7 @@ impl EndObject {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(NameSeparator, NAME_SEPARATOR);
+decl_ast_node!(NameSeparator, NAME_SEPARATOR, #[doc = "```abnf\nname-separator  = ws \":\" ws\n```"]);
 impl NameSeparator {
     /// Get colon `:`
     #[doc(alias = ":")]
@@ -207,7 +208,7 @@ impl NameSeparator {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(ValueSeparator, VALUE_SEPARATOR);
+decl_ast_node!(ValueSeparator, VALUE_SEPARATOR, #[doc = "```abnf\nvalue-separator = ws \",\" ws\n```"]);
 impl ValueSeparator {
     /// Get comma `,`
     #[doc(alias = ",")]
@@ -218,7 +219,7 @@ impl ValueSeparator {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WS)
     }
 }
-decl_ast_node!(Value, VALUE);
+decl_ast_node!(Value, VALUE, #[doc = "```abnf\nvalue = false / null / true / object / array / number / string\n```"]);
 impl Value {
     pub fn array(&self) -> Option<Array> {
         support::child(self.syntax())
@@ -242,7 +243,7 @@ impl Value {
         support::token(self.syntax(), SyntaxKind::TRUE)
     }
 }
-decl_ast_node!(Object, OBJECT);
+decl_ast_node!(Object, OBJECT, #[doc = "```abnf\nobject = begin-object [ member *(value-separator member) ]\n         end-object\n```"]);
 impl Object {
     pub fn begin_object(&self) -> BeginObject {
         support::child(self.syntax()).unwrap()
@@ -257,7 +258,7 @@ impl Object {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(Member, MEMBER);
+decl_ast_node!(Member, MEMBER, #[doc = "```abnf\nmember = string name-separator value\n```"]);
 impl Member {
     pub fn name_separator(&self) -> NameSeparator {
         support::child(self.syntax()).unwrap()
@@ -269,7 +270,7 @@ impl Member {
         support::child(self.syntax()).unwrap()
     }
 }
-decl_ast_node!(Array, ARRAY);
+decl_ast_node!(Array, ARRAY, #[doc = "```abnf\narray = begin-array [ value *( value-separator value ) ] end-array\n```"]);
 impl Array {
     pub fn begin_array(&self) -> BeginArray {
         support::child(self.syntax()).unwrap()
@@ -284,7 +285,7 @@ impl Array {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(Number, NUMBER);
+decl_ast_node!(Number, NUMBER, #[doc = "```abnf\nnumber          = [ minus ] int [ frac ] [ exp ]\n```"]);
 impl Number {
     pub fn exp(&self) -> Option<Exp> {
         support::child(self.syntax())
@@ -301,7 +302,7 @@ impl Number {
         support::token(self.syntax(), SyntaxKind::MINUS)
     }
 }
-decl_ast_node!(Exp, EXP);
+decl_ast_node!(Exp, EXP, #[doc = "```abnf\nexp             = e [ minus / plus ] DIGITS\n```"]);
 impl Exp {
     pub fn digits(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::DIGITS).unwrap()
@@ -320,7 +321,7 @@ impl Exp {
         support::token(self.syntax(), SyntaxKind::PLUS)
     }
 }
-decl_ast_node!(Frac, FRAC);
+decl_ast_node!(Frac, FRAC, #[doc = "```abnf\nfrac            = decimal-point DIGITS\n```"]);
 impl Frac {
     pub fn decimal_point(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::DECIMAL_POINT).unwrap()
@@ -329,7 +330,7 @@ impl Frac {
         support::token(self.syntax(), SyntaxKind::DIGITS).unwrap()
     }
 }
-decl_ast_node!(String, STRING);
+decl_ast_node!(String, STRING, #[doc = "```abnf\nstring = quotation-mark *char quotation-mark\n```"]);
 impl String {
     pub fn chars(&self) -> AstChildren<Char> {
         support::children(self.syntax())
@@ -338,7 +339,7 @@ impl String {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::QUOTATION_MARK)
     }
 }
-decl_ast_node!(Char, CHAR);
+decl_ast_node!(Char, CHAR, #[doc = "```abnf\nchar   = unescaped /\n            escape (\n                <\"> /          ; \"    quotation mark  U+0022\n                \"\\\" /          ; \\    reverse solidus U+005C\n                \"/\" /          ; /    solidus         U+002F\n                \"b\" /          ; b    backspace       U+0008\n                \"f\" /          ; f    form feed       U+000C\n                \"n\" /          ; n    line feed       U+000A\n                \"r\" /          ; r    carriage return U+000D\n                \"t\" /          ; t    tab             U+0009\n                \"u\" HEXDIG4 )  ; uXXXX                U+XXXX\n            @char\n```"]);
 impl Char {
     pub fn b_kw(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::B_KW)
