@@ -2,7 +2,8 @@
 use rowan::{ast::{support, AstChildren, AstNode}, Language};
 
 macro_rules! decl_ast_node {
-    ($node:ident, $kind:ident) => {
+    ($node:ident, $kind:ident $(, #[$meta:meta])?) => {
+        $(#[$meta])?
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct $node(SyntaxNode);
         impl AstNode for $node {
@@ -115,7 +116,7 @@ pub enum SyntaxKind {
 }
 impl From<::rowan::SyntaxKind> for SyntaxKind { fn from(kind: ::rowan::SyntaxKind) -> Self { ::core::assert!(kind.0 <= Self::DECL_LIST as u16); unsafe { ::core::mem::transmute::<u16, SyntaxKind>(kind.0) } } }
 impl From<SyntaxKind> for ::rowan::SyntaxKind { fn from(kind: SyntaxKind) -> Self { ::rowan::SyntaxKind(kind as u16) } }
-decl_ast_node!(Trivia, TRIVIA);
+decl_ast_node!(Trivia, TRIVIA, #[doc = "```abnf\n_           = whitespace *(comment whitespace)\n```"]);
 impl Trivia {
     pub fn comment_tokens(&self) -> impl Iterator<Item = SyntaxToken> {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::COMMENT)
@@ -124,7 +125,7 @@ impl Trivia {
         ::rowan_peg_utils::tokens(self.syntax(), SyntaxKind::WHITESPACE)
     }
 }
-decl_ast_node!(Label, LABEL);
+decl_ast_node!(Label, LABEL, #[doc = "```abnf\nlabel       = ident / string\n```"]);
 impl Label {
     pub fn ident(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::IDENT)
@@ -133,7 +134,7 @@ impl Label {
         support::token(self.syntax(), SyntaxKind::STRING)
     }
 }
-decl_ast_node!(RepeatRest, REPEAT_REST);
+decl_ast_node!(RepeatRest, REPEAT_REST, #[doc = "```abnf\nrepeat-rest = \"*\" [number]\n```"]);
 impl RepeatRest {
     pub fn number(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::NUMBER)
@@ -144,7 +145,7 @@ impl RepeatRest {
         support::token(self.syntax(), SyntaxKind::STAR).unwrap()
     }
 }
-decl_ast_node!(Repeat, REPEAT);
+decl_ast_node!(Repeat, REPEAT, #[doc = "```abnf\nrepeat      = \"+\"\n            / number [repeat-rest]\n            / repeat-rest\n```"]);
 impl Repeat {
     pub fn number(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::NUMBER)
@@ -158,7 +159,7 @@ impl Repeat {
         support::child(self.syntax())
     }
 }
-decl_ast_node!(PatExpect, PAT_EXPECT);
+decl_ast_node!(PatExpect, PAT_EXPECT, #[doc = "```abnf\npat-expect  = \"@\" label\n```"]);
 impl PatExpect {
     /// Get at `@`
     #[doc(alias = "@")]
@@ -169,7 +170,7 @@ impl PatExpect {
         support::child(self.syntax()).unwrap()
     }
 }
-decl_ast_node!(PatAtom, PAT_ATOM);
+decl_ast_node!(PatAtom, PAT_ATOM, #[doc = "```abnf\npat-atom    = ident !(_ \"=\")            ; a rule reference\n            / string                    ; keyword\n            / matches                   ; char classes\n            / \"[\" _ pat-choice _ \"]\"    ; optional\n            / \"(\" _ pat-choice _ \")\"\n```"]);
 impl PatAtom {
     pub fn ident(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::IDENT)
@@ -207,7 +208,7 @@ impl PatAtom {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(PatOp, PAT_OP);
+decl_ast_node!(PatOp, PAT_OP, #[doc = "```abnf\npat-op      = \"&\" pat-atom ; positive lookahead\n            / \"!\" pat-atom ; negative lookahead\n            / \"~\" pat-atom ; quiet\n            / \"$\" pat-atom ; slice\n            / repeat _ pat-atom\n            / pat-atom\n```"]);
 impl PatOp {
     /// Get amp `&`
     #[doc(alias = "&")]
@@ -239,7 +240,7 @@ impl PatOp {
         support::child(self.syntax())
     }
 }
-decl_ast_node!(PatList, PAT_LIST);
+decl_ast_node!(PatList, PAT_LIST, #[doc = "```abnf\npat-list    = pat-op *(_ pat-op)\n```"]);
 impl PatList {
     pub fn pat_ops(&self) -> AstChildren<PatOp> {
         support::children(self.syntax())
@@ -248,7 +249,7 @@ impl PatList {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(PatChoice, PAT_CHOICE);
+decl_ast_node!(PatChoice, PAT_CHOICE, #[doc = "```abnf\npat-choice  = pat-list *(_ \"/\" _ pat-list)\n              [_ pat-expect]\n```"]);
 impl PatChoice {
     pub fn pat_expect(&self) -> Option<PatExpect> {
         support::child(self.syntax())
@@ -265,7 +266,7 @@ impl PatChoice {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(Named, NAMED);
+decl_ast_node!(Named, NAMED, #[doc = "```abnf\nnamed       = ident _ \"=\" _\n```"]);
 impl Named {
     /// Get eq `=`
     #[doc(alias = "=")]
@@ -279,7 +280,7 @@ impl Named {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(Decl, DECL);
+decl_ast_node!(Decl, DECL, #[doc = "```abnf\ndecl        = named pat-choice\n```"]);
 impl Decl {
     pub fn named(&self) -> Named {
         support::child(self.syntax()).unwrap()
@@ -288,7 +289,7 @@ impl Decl {
         support::child(self.syntax()).unwrap()
     }
 }
-decl_ast_node!(Export, EXPORT);
+decl_ast_node!(Export, EXPORT, #[doc = "```abnf\nexport      = [named] ident\n```"]);
 impl Export {
     pub fn ident(&self) -> SyntaxToken {
         support::token(self.syntax(), SyntaxKind::IDENT).unwrap()
@@ -297,7 +298,7 @@ impl Export {
         support::child(self.syntax())
     }
 }
-decl_ast_node!(ExportList, EXPORT_LIST);
+decl_ast_node!(ExportList, EXPORT_LIST, #[doc = "```abnf\nexport-list = \"exports\" _ \"[\" _ *(export _) \"]\"\n```"]);
 impl ExportList {
     pub fn exports(&self) -> AstChildren<Export> {
         support::children(self.syntax())
@@ -319,7 +320,7 @@ impl ExportList {
         support::children(self.syntax())
     }
 }
-decl_ast_node!(DeclList, DECL_LIST);
+decl_ast_node!(DeclList, DECL_LIST, #[doc = "```abnf\ndecl-list   = _ [export-list _] +(decl _)\n```"]);
 impl DeclList {
     pub fn decls(&self) -> AstChildren<Decl> {
         support::children(self.syntax())
