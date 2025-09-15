@@ -35,3 +35,6 @@ mv -v ${bootstarp}_oldgen.rs $bootstarp.rs
 cargo run < grammar.abnf > ${bootstarp}_newgen.rs
 
 diff $bootstarp.rs ${bootstarp}_newgen.rs
+
+(cd ./examples/example-json &&
+    cargo run --package rowan-peg json.abnf > src/grammar.rs)
