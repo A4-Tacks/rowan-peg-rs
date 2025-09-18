@@ -399,11 +399,7 @@ impl<W: fmt::Write> Processor<W> {
     fn decl_is_token(&self, decl: &Decl) -> bool {
         let Some(list) = utils::one_elem(decl.pat_choice().pat_lists()) else { return false };
         let Some(op) = utils::one_elem(list.pat_ops()) else { return false };
-        if op.dollar().is_some() {
-            return true;
-        }
-        op.pat_atom().syntax().text_range() != op.syntax().text_range()
-            && op.pat_atom().string().is_some()
+        op.dollar().is_some()
     }
 
     fn process_decl(&mut self, decl: Decl) -> Result<()> {
