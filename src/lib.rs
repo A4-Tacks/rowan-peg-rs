@@ -191,7 +191,7 @@ impl<W: fmt::Write> Processor<W> {
     fn gen_tok_wrap<F, R>(&mut self, kind: &str, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "(g:({{state.quiet().guard_token({kind})}}) s:$((").unwrap();
+        write!(self.out, "(g:({{state.quiet().guard_token(SyntaxKind::{kind})}}) s:$((").unwrap();
         let result = f(self);
         write!(self.out, ")) {{g.accept_token(s)}})").unwrap();
         result
@@ -200,7 +200,7 @@ impl<W: fmt::Write> Processor<W> {
     fn gen_node_wrap<F, R>(&mut self, kind: &str, f: F) -> R
     where F: FnOnce(&mut Self) -> R,
     {
-        write!(self.out, "(g:({{state.guard({kind})}}) (").unwrap();
+        write!(self.out, "(g:({{state.guard(SyntaxKind::{kind})}}) (").unwrap();
         let result = f(self);
         write!(self.out, ") {{g.accept()}})").unwrap();
         result
@@ -290,7 +290,6 @@ impl<W: fmt::Write> Processor<W> {
         writeln!(self.out, "{PRE_DEFINE_ITEMS}").unwrap();
         writeln!(self.out, "::peg::parser!(pub grammar parser<'b>(state: \
             &'b ::rowan_peg_utils::ParseState<'input>) for str {{").unwrap();
-        writeln!(self.out, "    use SyntaxKind::*;").unwrap();
         writeln!(self.out, "{PRE_DEFINE_RULES}").unwrap();
         for decl in decl_list.decls() {
             self.process_decl(decl)?;
