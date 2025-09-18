@@ -1,6 +1,6 @@
 [package]
 name = "rowan-peg-macro"
-version = "0.2.1"
+version = "0.2.9"
 edition = "2024"
 
 authors = ["A4-Tacks <wdsjxhno1001@163.com>"]
@@ -15,4 +15,4 @@ proc-macro = true
 [dependencies]
 litrs = "0.5.1"
 proc-macro-tool = "0.8.38"
-rowan-peg = { version = "0.2.1", path = ".." }
+rowan-peg = { version = "0.2.9", path = ".." }
