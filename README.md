@@ -80,3 +80,110 @@ cargo run -- example.json
 ```
 cargo run -- examples/example-json/json.abnf
 ```
+
+
+Grammar
+===============================================================================
+
+## Exports
+
+Export or rename rules using `exports []`
+
+Such as `exports [ foo ]`, export `foo` rule (public it)
+
+Such as `exports [ bar = foo ]`, export `bar` rule (public and renamed into `bar`)
+
+
+## Rule
+
+Define a rule using `my-rule = "rule"`
+
+When a rule belongs to the following situations, it is a token rule:
+
+- rule body only exist a [slice](#slice) and optional expected
+
+  such as: `a = $"x"`, `a = $("a" ["b"])`, `a = $("a" ["b"]) @a`
+
+
+## Syntax Elements
+
+
+### String
+
+Hard matched content cannot be escaped, such as `"a"` `"+"`
+
+- For identifiers, they will be renamed as `{name}_kw`, such as `"if"` -> `if_kw`
+- For some punctuation marks, they will be renamed as names, such as `"!"` -> `bang`
+- For those that cannot be renamed, an error will be reported.
+  Please refer to the [Slice](#slice) for solution
+
+> [!NOTE]
+> Because it cannot be escaped, double quotes are represented by `<">`
+
+
+### Matches
+
+Match a some of characters or character ranges, can only be used in [slice](#slice)
+
+Escaping equivalent rust string-literal
+
+Syntax equivalent [char-classes](https://github.com/A4-Tacks/char-classes-rs)::any!() macro
+
+Such as `<a-z>` matches lowercase alpha, `<^0-9>` matches non number
+
+
+### Slice
+
+Collect any parsing range as a token, must be used in token rule
+
+Such as: `a-or-ab = $("a" ["b"])`, it can parsing `a`, `ab`
+
+
+### Choice
+
+Sequential choice, from PEG
+
+Such as: `x = "a" "b" / "c"`, it can parser `ab`, `c`
+
+When a branch fails, it will return to the beginning to try parsing the next branch
+
+If no branch is successful, the this rule fails
+
+
+### Repeat
+
+Repeat parsing specified number of times
+
+- `+x`:     Repeat x 1 to more times
+- `*x`:     Repeat x 0 to more times
+- `233*x`:  Repeat x 233 to more times
+- `*6x`:    Repeat x 0 to 6 times
+- `2*6x`:   Repeat x 2 to 6 times
+- `6x`:     Repeat x 6 times
+- `6(x y)`: Repeat x y 6 times
+
+
+### Lookahead
+
+Positive lookahead and Negative lookahead, from PEG
+
+- Positive lookahead:
+  Parsing, but success also returns to the beginning, which is a non consumption parsing
+- Negative lookahead:
+  Similar to positive lookahead, but fails upon success and succeeds upon failure
+
+
+### Quiet
+
+Map to [rust-peg] `quiet! {}`, will not add any expecteds from the target to the error message
+
+Such as: `x = "x" ~" " "y"`, quiet space token expecteds message
+
+
+### Comment
+
+Use semicolons for comment, such as:
+
+```abnf
+x = "a" ; this is a comment
+```
